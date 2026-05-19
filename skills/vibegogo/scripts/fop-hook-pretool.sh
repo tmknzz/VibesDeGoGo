@@ -268,12 +268,15 @@ case "$PHASE" in
         ;;
 
     reflection)
-        # Edit/Write は progress.md のみ許可（コード編集禁止）
+        # Edit/Write は progress.md と researcher の investigation-r{loop}.md のみ許可（コード編集禁止）
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
-            if [ -n "$FILE_PATH" ] && [[ "$FILE_PATH" == "${TASKS_DIR}/progress.md" ]]; then
-                exit 0
+            if [ -n "$FILE_PATH" ]; then
+                if [[ "$FILE_PATH" == "${TASKS_DIR}/progress.md" ]] \
+                    || [[ "$FILE_PATH" == "${TASKS_DIR}"/investigation-r*.md ]]; then
+                    exit 0
+                fi
             fi
-            echo "VibeGoGo Step ${STEP} (reflection) [${FON_ID}]: reflection 中は progress.md 以外の編集禁止: ${FILE_PATH:-（未指定）}" >&2
+            echo "VibeGoGo Step ${STEP} (reflection) [${FON_ID}]: reflection 中は progress.md / investigation-r{loop}.md 以外の編集禁止: ${FILE_PATH:-（未指定）}" >&2
             exit 2
         fi
         # Agent（subagent呼び出し）は許可 — reflection 冒頭で researcher 起動して深く深く調査するため
@@ -327,6 +330,39 @@ case "$PHASE" in
             fi
             echo "VibeGoGo Step ${STEP} (${PHASE}) [${FON_ID}]: ファイル編集は禁止（${PHASE} は .fop-target の VERSION_FILE_*_PATH と progress.md のみ許可、コードのロジック変更は新サイクルで Step 6 implementing で実施）" >&2
             exit 2
+        fi
+        # branch-pr ワークフロー: commit phase で base ブランチへの直接 commit/push を物理ブロック
+        if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "commit" ]; then
+            # set -euo pipefail 下でも落ちないよう、各抽出は || true でフェイルセーフにする
+            WF=branch-pr; BB=""
+            if [ -f "$CWD/.fop-target" ]; then
+                WF=$( { grep -E '^WORKFLOW=' "$CWD/.fop-target" 2>/dev/null || true; } | tail -1 | sed -E 's/^[^=]*=//; s/^"//; s/"$//')
+                BB=$( { grep -E '^BASE_BRANCH=' "$CWD/.fop-target" 2>/dev/null || true; } | tail -1 | sed -E 's/^[^=]*=//; s/^"//; s/"$//')
+                WF=${WF:-branch-pr}
+            fi
+            if [ "$WF" != "trunk" ]; then
+                if [ -z "$BB" ]; then
+                    BB=$(git -C "$CWD" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+                    BB=${BB#origin/}
+                    BB=${BB:-main}
+                fi
+                CURBR=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+                # BB はブランチ名（.  +  {  }  (  )  | 等 ERE メタ文字を正当に含みうる）。
+                # grep -E に生で埋めると誤判定するため、英数字以外を全エスケープして
+                # リテラル一致を保証する。
+                BB_RE=$(printf '%s' "$BB" | sed 's/[^[:alnum:]]/\\&/g')
+                if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([[:space:]]|$)'; then
+                    if [ "$CURBR" = "$BB" ]; then
+                        echo "VibeGoGo Step ${STEP} (commit) [${FON_ID}]: branch-pr では base ブランチ（${BB}）への直接 commit/push は禁止。vibegogo/{id} feature ブランチ上で作業し PR を作成してください（trunk 運用なら .fop-target に WORKFLOW=trunk を明示）" >&2
+                        exit 2
+                    fi
+                    if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+push' \
+                        && echo "$COMMAND" | grep -qE "(^|[^a-zA-Z0-9_/.-])${BB_RE}([^a-zA-Z0-9_/.-]|\$)"; then
+                        echo "VibeGoGo Step ${STEP} (commit) [${FON_ID}]: branch-pr では base ブランチ（${BB}）への直接 push は禁止。feature ブランチを push して PR 経由でマージしてください" >&2
+                        exit 2
+                    fi
+                fi
+            fi
         fi
         ;;
 esac

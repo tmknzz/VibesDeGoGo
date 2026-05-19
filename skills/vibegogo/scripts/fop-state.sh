@@ -31,6 +31,13 @@ _fop_state_file_for_id() {
     echo "${FON_STATE_DIR}/.fop-state-${id}"
 }
 
+# glob 一致ファイルを安全に削除する。シェルに glob 展開させず find に渡すため、
+# zsh で対話 source されても nomatch エラー（"no matches found"）にならない。
+_fop_rm_glob() {
+    [ -d "$1" ] || return 0
+    find "$1" -maxdepth 1 -name "$2" -type f -exec rm -f {} + 2>/dev/null || true
+}
+
 _fop_get_active_id() {
     local active_file
     active_file=$(_fop_active_file)
@@ -100,9 +107,9 @@ fop_state_init() {
     mkdir -p "$tasks_dir"
 
     # 中断（clear せず放棄）された前セッションの残骸を掃除し、新セッションへの汚染を防ぐ
-    rm -f "${FON_STATE_DIR}"/.fop-step-block-* 2>/dev/null || true
+    _fop_rm_glob "${FON_STATE_DIR}" '.fop-step-block-*'
     rm -f "${FON_STATE_DIR}/.fop-error-pending" 2>/dev/null || true
-    rm -f "${FON_STATE_DIR}"/.fop-simplify-sentinel-* 2>/dev/null || true
+    _fop_rm_glob "${FON_STATE_DIR}" '.fop-simplify-sentinel-*'
 
     # active file にIDを書き込み
     echo "$id" > "$active_file"
@@ -279,9 +286,9 @@ fop_state_clear() {
     fi
 
     # 同 turn retry block フラグの残骸を一掃（次セッション汚染防止）
-    rm -f "${FON_STATE_DIR}"/.fop-step-block-* 2>/dev/null || true
+    _fop_rm_glob "${FON_STATE_DIR}" '.fop-step-block-*'
     rm -f "${FON_STATE_DIR}/.fop-error-pending" 2>/dev/null || true
-    rm -f "${FON_STATE_DIR}"/.fop-simplify-sentinel-* 2>/dev/null || true
+    _fop_rm_glob "${FON_STATE_DIR}" '.fop-simplify-sentinel-*'
 
     echo "fop-state: cleared (id=$id)" >&2
 }

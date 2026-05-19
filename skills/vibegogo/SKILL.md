@@ -134,6 +134,28 @@ fop_state_init
 
 `fop_state_init` が step=1, phase=declare, loop_count=0 で state file を初期化するので、**続けて `fop_state_write` を呼ぶ必要はない**。
 
+##### feature ブランチ生成（branch-pr ワークフロー、デフォルト）
+
+`fop_state_init` の直後、**コード編集（Step 6）より前に** 作業ブランチを用意する。`.fop-target` の `WORKFLOW`（未設定時 `branch-pr`）/ `BASE_BRANCH` を読む。詳細スキーマ: `references/target_schema.md`
+
+```bash
+WORKFLOW=branch-pr; BASE_BRANCH=""
+if [ -f "$(pwd)/.fop-target" ]; then source "$(pwd)/.fop-target"; fi
+if [ "${WORKFLOW:-branch-pr}" != "trunk" ]; then
+    if [ -z "${BASE_BRANCH:-}" ]; then
+        BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+        BASE_BRANCH=${BASE_BRANCH:-main}
+    fi
+    CUR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    case "$CUR" in
+        vibegogo/*) : ;;  # 既に作業ブランチ上 — そのまま使う（入れ子にしない）
+        *) git checkout -b "vibegogo/$(fop_get_id)" ;;
+    esac
+fi
+```
+
+`WORKFLOW=trunk` のプロジェクトはこのブロックをスキップし、現ブランチで進む（旧挙動）。branch-pr では以降の base ブランチ直コミット / 直 push を hook がブロックする。
+
 続けて Step 1 宣言フォーマットを出力（id 部分は `$(fop_get_id)` の結果で埋める）。詳細: `references/output_formats.md`
 
 #### Step 2: 要件文書化（エージェント）
@@ -264,7 +286,7 @@ researcher の調査結果が揃ってから、エージェントが下記 4 項
 
 ##### reflection 中の制限（hook で物理強制）
 
-- Edit/Write は **progress.md のみ許可**（コード編集禁止）
+- Edit/Write は **`progress.md` と researcher の retry 調査書 `tasks/fop/{id}/investigation-r{loop_count}.md` のみ許可**（コード編集禁止）。researcher が §0 で investigation-r{loop}.md を書けるようにするための例外
 - Agent（subagent呼び出し）は **researcher 起動目的で許可**
 - Read/Grep/Bash で追加調査するのも自由
 
@@ -343,26 +365,56 @@ Step 8 の具体的な手順は **プロジェクトルートの `.fop-target`**
 fop_state_advance 9 commit
 ```
 
-Step 8 でバージョン番号を更新した場合、そのファイルもコミット対象に含める。
+Step 8 でバージョン番号を更新した場合、そのファイルもコミット対象に含める。コミットは現在の **feature ブランチ**（Step 1 で切った `vibegogo/{id}`）上で行う。
 
-コミット完了後、`.fop-target` の `AUTO_PUSH` を確認する。`AUTO_PUSH=true` の場合のみリモートに push する:
+コミット完了後、`.fop-target` の `WORKFLOW`（未設定時 `branch-pr`）で分岐する:
+
 ```bash
-if [ -f "$(pwd)/.fop-target" ]; then
-    source "$(pwd)/.fop-target"
-fi
-
-if [ "${AUTO_PUSH:-false}" = "true" ]; then
-    git push
-fi
+WORKFLOW=branch-pr; BASE_BRANCH=""
+if [ -f "$(pwd)/.fop-target" ]; then source "$(pwd)/.fop-target"; fi
 ```
-`AUTO_PUSH` が未設定または `true` 以外なら push しない。push しなかった場合は、完了報告で「push 未実行（AUTO_PUSH 未設定）」を明記する。
 
-その後 state をクリア:
+##### branch-pr（デフォルト）
+
+feature ブランチを push し、PR を作成して **停止する**。マージはしない。
+
+```bash
+if [ -z "${BASE_BRANCH:-}" ]; then
+    BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+    BASE_BRANCH=${BASE_BRANCH:-main}
+fi
+BR=$(git rev-parse --abbrev-ref HEAD)
+git push -u origin "$BR"
+gh pr create --base "$BASE_BRANCH" --head "$BR" \
+    --title "<コミット要約と同趣旨>" \
+    --body "<Goal / 変更概要 / 検証結果（ハーネス・ビルド等）/ 残リスク>"
+```
+
+PR URL を完了報告に必ず含める。**ここで停止**し、マージ可否は人の判断に委ねる。
+
+> マージ作業はエージェント委任。**人が承認したら** エージェントが次を実行する（GREEN だけでの自動マージは禁止）:
+> ```bash
+> gh pr merge --squash --delete-branch
+> git checkout "$BASE_BRANCH" && git pull --ff-only
+> ```
+> 承認前にこれを先回り実行してはならない（制約逸脱）。
+
+##### trunk（`.fop-target` で `WORKFLOW=trunk` を明示した場合のみ）
+
+旧挙動。現ブランチへ直接コミットし、`AUTO_PUSH=true` のときだけ push する:
+```bash
+if [ "${AUTO_PUSH:-false}" = "true" ]; then git push; fi
+```
+push しなかった場合は完了報告で「push 未実行（AUTO_PUSH 未設定/false）」を明記する。
+
+##### 共通: state クリアと締めくくり
+
+PR 作成（branch-pr）/ commit・push 判断（trunk）まで終えたら state をクリアする。branch-pr ではフォーメーションサイクルはここで完了扱い（マージは承認後の後続アクション）:
 ```bash
 fop_state_clear
 ```
 
-**フォーメーション完了の締めくくり（必須）**: `fop_state_clear` 後、最終ビルドナンバーをチャットに明示出力する。フォーマット詳細: `references/output_formats.md`
+**フォーメーション完了の締めくくり（必須）**: `fop_state_clear` 後、最終ビルドナンバー（および branch-pr では PR URL）をチャットに明示出力する。フォーマット詳細: `references/output_formats.md`
 
 ## コミット規約
 

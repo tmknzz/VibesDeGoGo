@@ -35,6 +35,12 @@ It is intentionally strict on the agent side and lightweight on the user side.
 - **Verification required:** do not mark a task complete without tests, build verification, smoke checks, or explicit manual verification steps where automation is not possible.
 - **Push behavior is workflow-specific:** default `branch-pr` pushes the feature branch to create a PR; `trunk` pushes only when `.fop-target` sets `AUTO_PUSH=true`.
 
+## Modes
+
+- **Full flow:** default for normal coding work.
+- **Self-maintenance mode:** only for changes under `skills/vibegogo/`; keeps VibeGoGo self-edits focused while preserving core checks.
+- **Lightweight mode:** for small, closed changes in general projects. It still requires fixed scope, existing patterns, no new dependencies, and explicit verification. It escalates to full flow when tests fail twice, scope expands, or specification judgment is needed.
+
 ## Repository Layout
 
 ```text

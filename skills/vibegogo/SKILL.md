@@ -1,7 +1,7 @@
 ---
 name: VibeGoGo
 description: "A state-and-hook workflow for Claude Code that keeps coding agents moving until done while stopping only for constraint violations."
-version: 1.7.0
+version: 1.7.1
 ---
 
 # VibeGoGo
@@ -47,7 +47,7 @@ state file と pre-tool hook で Step 順序を物理強制する直列実行型
 - 検証失敗が2回続く、迷いがある、影響範囲が広がる、または検証不能になった場合は full flow に昇格する
 - Step 8 deploy は不要
 - 進行確認では止まらない。制約逸脱・破壊的変更・外部依存追加が必要なときだけ確認する
-- 完了報告は「変更ファイル / 検証結果 / 残リスク」だけを短く
+- 完了報告は user 向けの平易な結論を先に出し、必要なら技術メモを後段に分ける
 
 VibeGoGo 以外の通常のコード変更は本モードの対象外。従来どおり full フローに従う。
 
@@ -454,7 +454,7 @@ PR URL を完了報告に必ず含める。**ここで停止**し、マージ可
 ```bash
 if [ "${AUTO_PUSH:-false}" = "true" ]; then git push; fi
 ```
-push しなかった場合は完了報告で「push 未実行（AUTO_PUSH 未設定/false）」を明記する。
+push しなかった場合は、user 向け本文では「GitHub にはまだ反映していません」と平易に書き、技術メモで「push 未実行（AUTO_PUSH 未設定/false）」を明記する。
 
 ##### 共通: state クリアと締めくくり
 
@@ -463,7 +463,7 @@ PR 作成（branch-pr）/ commit・push 判断（trunk）まで終えたら stat
 fop_state_clear
 ```
 
-**フォーメーション完了の締めくくり（必須）**: `fop_state_clear` 後、最終ビルドナンバー（および branch-pr では PR URL）をチャットに明示出力する。フォーマット詳細: `references/output_formats.md`
+**フォーメーション完了の締めくくり（必須）**: `fop_state_clear` 後、user 向けに「何が終わったか / 次に何が必要か」を平易に出し、最終ビルドナンバー（および branch-pr では PR URL）をチャットに明示出力する。技術詳細は後段の「技術メモ」に分ける。フォーマット詳細: `references/output_formats.md`
 
 ## コミット規約
 
@@ -567,4 +567,4 @@ reflection の researcher 起動はサボりが出やすい。「エージェン
 - [ ] Step 6: エージェント or subagentでコード/テスト → `fop_state_advance 6 implementing`
 - [ ] Step 7: エージェント or subagentでテスト or 実機確認 → 全パス後 **simplify レビュー** 実施（**`fop_state_advance 7 verified` 直前に simplify 起動済み — hook が sentinel `.fop-simplify-sentinel-{fop_id}-{loop_count}` を検証、未起動 / `modified=1` はブロック**）→ 修正なし or 軽微なら `fop_state_advance 7 verified`（loop_count<99 が条件）、修正ありなら **reflection 経由（冒頭で必ず researcher 再起動 → investigation-r{loop_count}.md 生成 → 4 項目 progress.md 追記）→ implementing → 再テスト**
 - [ ] Step 8: `.fop-target` 参照でバージョン更新 → 検証依頼 → **ビルド/install 完了後にビルドナンバー出力（YYYYMMDD+ABC 形式）** → 確認ポイント言語化 → progress.md 更新 → `fop_state_advance 8 progress`
-- [ ] Step 9: コミット → `.fop-target` の `AUTO_PUSH=true` の場合のみ push（未設定なら push 未実行を明記）→ `fop_state_clear` → **【VibeGoGo 完了】宣言と最終ビルドナンバー出力**
+- [ ] Step 9: コミット → `.fop-target` の `AUTO_PUSH=true` の場合のみ push（未設定なら user 向け本文と技術メモで未反映を明記）→ `fop_state_clear` → **平易な完了報告 + 技術メモ + 最終ビルドナンバー出力**

@@ -99,6 +99,11 @@ fop_state_init() {
     mkdir -p "$(dirname "$state_file")"
     mkdir -p "$tasks_dir"
 
+    # 中断（clear せず放棄）された前セッションの残骸を掃除し、新セッションへの汚染を防ぐ
+    rm -f "${FON_STATE_DIR}"/.fop-step-block-* 2>/dev/null || true
+    rm -f "${FON_STATE_DIR}/.fop-error-pending" 2>/dev/null || true
+    rm -f "${FON_STATE_DIR}"/.fop-simplify-sentinel-* 2>/dev/null || true
+
     # active file にIDを書き込み
     echo "$id" > "$active_file"
 
@@ -205,6 +210,13 @@ fop_state_advance() {
 
     local current_task
     current_task=$(grep "^current_task=" "$state_file" | cut -d= -f2-)
+
+    # 8→5（progress → task-selected = 次タスク着手）では loop_count を 0 にリセット。
+    # loop_count は「同タスクの試行回数」であり、タスクを跨いで累積させると
+    # アーキ検討必須（>3）/ 上限（99）判定が誤発火する。
+    if [ "$current_step" -eq 8 ] && [ "$next_step" -eq 5 ]; then
+        current_loop=0
+    fi
 
     fop_state_write "$next_step" "$next_phase" "$current_loop" "$current_task"
 }

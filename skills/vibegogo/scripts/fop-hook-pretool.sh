@@ -6,13 +6,21 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq &> /dev/null; then
+    # jq 不在時はフェイルクローズ（安全側ブロック）。ただし jq 導入そのもの（狭い
+    # セットアップ系ホワイトリスト）だけは素通しし、復旧経路を塞がない。
+    FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+    FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
     if command -v brew &> /dev/null; then
         ( brew install jq > /tmp/fop-jq-install.log 2>&1 & )
         echo "fop-hook-pretool: jq not found. Auto-installing in background (brew install jq, log: /tmp/fop-jq-install.log)。インストール完了後（数秒〜1分）に再度実行してください。" >&2
     else
         echo "fop-hook-pretool: jq required but brew not found. Install jq manually." >&2
     fi
-    exit 1
+    if [ "$FALLBACK_TOOL" = "Bash" ] && printf '%s' "$FALLBACK_CMD" | grep -qE 'brew[[:space:]]+(install|reinstall)([[:space:]]|[^|;&])*[[:space:]]jq([[:space:]]|$)'; then
+        exit 0
+    fi
+    echo "fop-hook-pretool: jq 不在のため安全側でブロック（fail-close）。jq を導入してから再実行してください。" >&2
+    exit 2
 fi
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
@@ -183,6 +191,16 @@ case "$PHASE" in
             echo "VibeGoGo Step ${STEP} [${FON_ID}]: 人間のターンです" >&2
             exit 2
         fi
+        # Edit/Write は tasks/fop/{id}/ 配下のみ許可（コード編集禁止）
+        if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
+            if [ -n "$FILE_PATH" ]; then
+                if [[ "$FILE_PATH" == */${TASKS_DIR}/* ]] || [[ "$FILE_PATH" == ${TASKS_DIR}/* ]]; then
+                    exit 0
+                fi
+                echo "VibeGoGo Step ${STEP} (${PHASE}) [${FON_ID}]: ${TASKS_DIR}/ 配下以外のファイル編集は禁止: $FILE_PATH" >&2
+                exit 2
+            fi
+        fi
         # requirements phase で Step 3 (investigating) へ遷移するコマンド実行時、
         # tasks/fop/{id}/requirements.md の存在を必須化
         if [ "$PHASE" = "requirements" ] && [ "$TOOL_NAME" = "Bash" ]; then
@@ -261,7 +279,12 @@ case "$PHASE" in
         # Agent（subagent呼び出し）は許可 — reflection 冒頭で researcher 起動して深く深く調査するため
         # Bash: reflection → implementing 遷移コマンド実行時、progress.md が reflection 中に更新されたかを検証
         if [ "$TOOL_NAME" = "Bash" ]; then
-            if echo "$COMMAND" | grep -qE 'fop_state_(loop|advance|write)[[:space:]]+5[[:space:]]+implementing'; then
+            # reflection → verified 直行は禁止（必ず implementing 経由で再テスト）
+            if echo "$COMMAND" | grep -qE 'fop_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
+                echo "VibeGoGo Step ${STEP} (reflection) [${FON_ID}]: reflection → verified 直行は禁止。fop_state で implementing に戻して再テストし、testing→simplify→verified の正規経路を通してください" >&2
+                exit 2
+            fi
+            if echo "$COMMAND" | grep -qE 'fop_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
                 PROGRESS_FILE="${TASKS_DIR}/progress.md"
                 if [ ! -f "$PROGRESS_FILE" ]; then
                     echo "VibeGoGo reflection [${FON_ID}]: progress.md が存在しません。失敗要因・前回との差分・次の仮説を追記してから implementing に戻してください" >&2

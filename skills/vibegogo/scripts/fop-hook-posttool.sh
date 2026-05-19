@@ -7,13 +7,21 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq &> /dev/null; then
+    # jq 不在時はフェイルクローズ（安全側ブロック）。ただし jq 導入そのもの（狭い
+    # セットアップ系ホワイトリスト）だけは素通しし、復旧経路を塞がない。
+    FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+    FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
     if command -v brew &> /dev/null; then
         ( brew install jq > /tmp/fop-jq-install.log 2>&1 & )
         echo "fop-hook-posttool: jq not found. Auto-installing in background (brew install jq, log: /tmp/fop-jq-install.log)。" >&2
     else
         echo "fop-hook-posttool: jq required but brew not found. Install jq manually." >&2
     fi
-    exit 1
+    if [ "$FALLBACK_TOOL" = "Bash" ] && printf '%s' "$FALLBACK_CMD" | grep -qE 'brew[[:space:]]+(install|reinstall)([[:space:]]|[^|;&])*[[:space:]]jq([[:space:]]|$)'; then
+        exit 0
+    fi
+    echo "fop-hook-posttool: jq 不在のため安全側でブロック（fail-close）。jq を導入してから再実行してください。" >&2
+    exit 2
 fi
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')

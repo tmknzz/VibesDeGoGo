@@ -42,9 +42,15 @@ It is intentionally strict on the agent side and lightweight on the user side.
 - **Lightweight mode:** for small, closed changes in general projects. It still requires fixed scope, existing patterns, no new dependencies, and explicit verification. It escalates to full flow when tests fail twice, scope expands, or specification judgment is needed.
 - **Friendly completion reports:** final messages start with plain-language status and next steps, with Git details separated into a short technical note.
 
+## Guides
+
+- [Guide sales plan](docs/guide-sales-plan.md): plan for a beginner-friendly paid guide and note article.
+
 ## Repository Layout
 
 ```text
+docs/
+  guide-sales-plan.md
 skills/vibegogo/
   SKILL.md
   scripts/

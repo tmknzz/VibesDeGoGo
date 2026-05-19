@@ -347,13 +347,17 @@ case "$PHASE" in
                     BB=${BB:-main}
                 fi
                 CURBR=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+                # BB はブランチ名（.  +  {  }  (  )  | 等 ERE メタ文字を正当に含みうる）。
+                # grep -E に生で埋めると誤判定するため、英数字以外を全エスケープして
+                # リテラル一致を保証する。
+                BB_RE=$(printf '%s' "$BB" | sed 's/[^[:alnum:]]/\\&/g')
                 if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([[:space:]]|$)'; then
                     if [ "$CURBR" = "$BB" ]; then
                         echo "VibeGoGo Step ${STEP} (commit) [${FON_ID}]: branch-pr では base ブランチ（${BB}）への直接 commit/push は禁止。vibegogo/{id} feature ブランチ上で作業し PR を作成してください（trunk 運用なら .fop-target に WORKFLOW=trunk を明示）" >&2
                         exit 2
                     fi
                     if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+push' \
-                        && echo "$COMMAND" | grep -qE "(^|[^a-zA-Z0-9_/.-])${BB}([^a-zA-Z0-9_/.-]|\$)"; then
+                        && echo "$COMMAND" | grep -qE "(^|[^a-zA-Z0-9_/.-])${BB_RE}([^a-zA-Z0-9_/.-]|\$)"; then
                         echo "VibeGoGo Step ${STEP} (commit) [${FON_ID}]: branch-pr では base ブランチ（${BB}）への直接 push は禁止。feature ブランチを push して PR 経由でマージしてください" >&2
                         exit 2
                     fi

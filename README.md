@@ -40,6 +40,7 @@ It is intentionally strict on the agent side and lightweight on the user side.
 - **Full flow:** default for normal coding work.
 - **Self-maintenance mode:** only for changes under `skills/vibegogo/`; keeps VibeGoGo self-edits focused while preserving core checks.
 - **Lightweight mode:** for small, closed changes in general projects. It still requires fixed scope, existing patterns, no new dependencies, and explicit verification. It escalates to full flow when tests fail twice, scope expands, or specification judgment is needed.
+- **Friendly completion reports:** final messages start with plain-language status and next steps, with Git details separated into a short technical note.
 
 ## Repository Layout
 

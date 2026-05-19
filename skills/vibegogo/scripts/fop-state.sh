@@ -18,7 +18,8 @@ _fop_generate_id() {
     local timestamp
     timestamp=$(date +%Y%m%d-%H%M)
     local random
-    random=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c4)
+    # Avoid SIGPIPE from `tr | head` under caller shells using `set -o pipefail`.
+    random=$(LC_ALL=C od -An -N8 -tx1 /dev/urandom | tr -d ' \n' | cut -c1-4)
     echo "${timestamp}-${random}"
 }
 
@@ -170,6 +171,15 @@ fop_state_write() {
     if [ -z "$state_file" ]; then
         echo "fop_state_write: active なVibeGoGoがありません" >&2
         return 1
+    fi
+
+    if [ -f "$state_file" ]; then
+        local current_step
+        current_step=$(grep "^step=" "$state_file" | cut -d= -f2)
+        current_step="${current_step:-0}"
+        if ! _fop_check_step_transition "$current_step" "$new_step"; then
+            return 1
+        fi
     fi
 
     local id

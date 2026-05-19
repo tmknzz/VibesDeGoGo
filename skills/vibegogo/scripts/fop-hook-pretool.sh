@@ -108,9 +108,8 @@ fi
 if [ "$TOOL_NAME" = "Bash" ]; then
     # Bash でも state file を書き換えるコマンド（リダイレクト / tee / sed -i / mv / cp / rm）をブロック
     if echo "$COMMAND" | grep -qE '(\.claude/\.fop-state-|\.claude/\.fop-active)'; then
-        # fop_state_* 関数呼び出し or 読み取り用（cat/grep/less/tail/head/source/\.） は許可、それ以外はブロック
-        if echo "$COMMAND" | grep -qE '(>|>>|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])' \
-            && ! echo "$COMMAND" | grep -qE 'fop_state_(init|write|advance|loop|clear)'; then
+        # fop_state_* 関数を同じコマンドに混ぜても、明示パスへの書き込みは許可しない。
+        if echo "$COMMAND" | grep -qE '(>|>>|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
             echo "VibeGoGo [${FON_ID}]: state file を Bash で直接書き換えることは禁止。fop_state_* 関数経由で操作してください" >&2
             exit 2
         fi
@@ -138,6 +137,11 @@ fi
 # 注: assistant text 側の宣言テキストは人間可読・チャット表示用に残すが、
 #     hook の検証対象ではない（hook は COMMAND だけを見る）。
 if [ "$TOOL_NAME" = "Bash" ] && echo "$COMMAND" | grep -qE 'fop_state_(advance|loop|write)[[:space:]]+[0-9]+'; then
+    TRANSITION_COUNT=$(printf '%s\n' "$COMMAND" | grep -oE 'fop_state_(advance|loop)[[:space:]]+[0-9]+' | wc -l | tr -d ' ')
+    if [ "${TRANSITION_COUNT:-0}" -gt 1 ]; then
+        echo "VibeGoGo [${FON_ID}]: 1つの Bash コマンドで複数の fop_state_advance/loop を実行することは禁止。Step gate をすり抜けないよう、1ツール呼び出しにつき1遷移に分けてください" >&2
+        exit 2
+    fi
     TARGET_STEP=$(echo "$COMMAND" | sed -nE 's/.*fop_state_(advance|loop|write)[[:space:]]+([0-9]+).*/\2/p' | head -1)
     if [ -n "$TARGET_STEP" ]; then
         DECL_OK=0
@@ -289,12 +293,22 @@ case "$PHASE" in
             fi
             if echo "$COMMAND" | grep -qE 'fop_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
                 PROGRESS_FILE="${TASKS_DIR}/progress.md"
+                RETRY_INVESTIGATION_FILE="${TASKS_DIR}/investigation-r${LOOP_COUNT}.md"
+                if [ ! -f "$RETRY_INVESTIGATION_FILE" ]; then
+                    echo "VibeGoGo reflection [${FON_ID}]: ${RETRY_INVESTIGATION_FILE} が存在しません。researcher の retry 調査書を作成してから implementing に戻してください" >&2
+                    exit 2
+                fi
                 if [ ! -f "$PROGRESS_FILE" ]; then
                     echo "VibeGoGo reflection [${FON_ID}]: progress.md が存在しません。失敗要因・前回との差分・次の仮説を追記してから implementing に戻してください" >&2
                     exit 2
                 fi
                 STATE_MTIME=$(stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
+                RETRY_INVESTIGATION_MTIME=$(stat -f %m "$RETRY_INVESTIGATION_FILE" 2>/dev/null || echo 0)
                 PROGRESS_MTIME=$(stat -f %m "$PROGRESS_FILE" 2>/dev/null || echo 0)
+                if [ "$RETRY_INVESTIGATION_MTIME" -le "$STATE_MTIME" ]; then
+                    echo "VibeGoGo reflection [${FON_ID}]: reflection 中に investigation-r${LOOP_COUNT}.md が更新されていません。researcher 調査を書いてから implementing に戻してください" >&2
+                    exit 2
+                fi
                 if [ "$PROGRESS_MTIME" -le "$STATE_MTIME" ]; then
                     echo "VibeGoGo reflection [${FON_ID}]: reflection 中に progress.md が更新されていません（失敗要因・前回との差分・次の仮説を追記してから implementing に戻す）" >&2
                     exit 2

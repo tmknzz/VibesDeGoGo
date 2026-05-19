@@ -33,7 +33,7 @@
 | `task-selected` | Step 5 | **ブロック** | 全許可（state file 除く） | 許可 | Edit/Write はブロック |
 | `implementing` | Step 6 | 全許可（state file 除く） | `git\s+commit` / テスト実行コマンド（`swift test`/`npm test`/`pnpm test`/`yarn test`/`pytest`/`go test`/`cargo test`/`jest`/`vitest`/`mocha`/`xcodebuild ... test`）をブロック（**ガード5 対策**） | 許可 | 実装はエージェント／subagentいずれも可 |
 | `testing` | Step 7 | 全許可（state file 除く） | `git\s+commit` をブロック。`testing→implementing` 直接遷移（`fop_state_(loop\|advance\|write) <N> implementing`）もブロック（reflection 経由強制）。`fop_state_advance 7 verified` 直前に `.claude/.fop-simplify-sentinel-{fop_id}-{loop_count}` を検証 → 未存在ならブロック（simplify 未起動）、`modified=1` ならブロック（reflection 経由必須） | 許可 | テスト実行 + simplify 起動の物理強制（詳細は末尾「simplify 起動の物理強制」セクション） |
-| `reflection` | Step 6-R | `progress.md` のみ許可、他ブロック | reflection→implementing 遷移時は progress.md の mtime 検証 | **許可**（researcher 起動目的） | 冒頭で必ず researcher を再起動して深く深く調査、その結果を引用しながら 4 項目を追記 |
+| `reflection` | Step 6-R | `progress.md` と `investigation-r{loop}.md` のみ許可、他ブロック | reflection→implementing 遷移時は progress.md と `investigation-r{loop}.md` の存在・mtime 検証 | **許可**（researcher 起動目的） | 冒頭で必ず researcher を再起動して深く深く調査、その結果を引用しながら 4 項目を追記 |
 | `verified` | Step 7 末尾 | **ブロック** | 全許可（state file 除く） | 許可 | Step 8 遷移待ち |
 | `progress` | Step 8 | `progress.md` と `.fop-target` の `VERSION_FILE_*_PATH` マッチのみ許可、他ブロック | 全許可（state file 除く） | 許可 | Bash 経由の書き込みは state file 以外素通し |
 | `commit` | Step 9 | `progress.md` と `.fop-target` の `VERSION_FILE_*_PATH` マッチのみ許可、他ブロック | 全許可（state file 除く、`git\s+commit` ブロックなし） | 許可 | コードロジック変更は禁止（新サイクルの Step 6 で実施）。git add/commit/push 等は Bash で実行可能 |

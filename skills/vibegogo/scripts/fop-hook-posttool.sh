@@ -25,6 +25,7 @@ if ! command -v jq &> /dev/null; then
 fi
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+HOOK_EVENT_NAME=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
 
 # CWD を取得
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
@@ -80,6 +81,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_response.exit_code // 0')
 STDERR=$(echo "$INPUT" | jq -r '.tool_response.stderr // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // empty')
+HOOK_ERROR=$(echo "$INPUT" | jq -r '.error // empty')
 
 # TODO(T3/T4): testing phase の simplify sentinel 処理は以降のブロックで追加する。
 #              tool_name が Skill/Edit/Write のとき Bash エラー検出は無意味なので
@@ -178,6 +180,15 @@ if [ "$EXIT_CODE" -ne 0 ]; then
     fi
 fi
 
+if [ "$ERROR_DETECTED" -eq 0 ] && [ "$HOOK_EVENT_NAME" = "PostToolUseFailure" ]; then
+    ERROR_DETECTED=1
+    if [ -n "$HOOK_ERROR" ]; then
+        ERROR_REASON="$HOOK_ERROR"
+    else
+        ERROR_REASON="PostToolUseFailure"
+    fi
+fi
+
 # stderr に error / fail パターン（検索系は除外、stderr が出力結果になることがある）
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     if echo "$STDERR" | grep -qE '(^|[^a-zA-Z])(error|Error|ERROR|fail|Fail|FAIL|Exception|Traceback|エラー|失敗)([^a-zA-Z]|$)'; then
@@ -201,7 +212,11 @@ if [ "$ERROR_DETECTED" -eq 1 ]; then
         echo "reason=$ERROR_REASON"
         echo "command=$COMMAND"
         echo "exit_code=$EXIT_CODE"
-        echo "stderr_excerpt=$(echo "$STDERR" | head -c 500)"
+        if [ -n "$STDERR" ]; then
+            echo "stderr_excerpt=$(echo "$STDERR" | head -c 500)"
+        else
+            echo "stderr_excerpt=$(echo "$HOOK_ERROR" | head -c 500)"
+        fi
     } > "$FLAG_FILE"
 fi
 

@@ -33,7 +33,7 @@ It is intentionally strict on the agent side and lightweight on the user side.
 - **Constraint confirmation required:** the agent must stop before changing constraints, adding dependencies, using non-standard implementations, changing persistence/API/billing/analytics contracts, touching security-sensitive behavior, or performing destructive operations.
 - **Standard-first:** use the platform/framework standard components, APIs, and patterns first. If that is not enough, report the reason and alternatives before implementation.
 - **Verification required:** do not mark a task complete without tests, build verification, smoke checks, or explicit manual verification steps where automation is not possible.
-- **Push is opt-in:** `git push` runs only when `.fop-target` sets `AUTO_PUSH=true`.
+- **Push behavior is workflow-specific:** default `branch-pr` pushes the feature branch to create a PR; `trunk` pushes only when `.fop-target` sets `AUTO_PUSH=true`.
 
 ## Repository Layout
 
@@ -79,15 +79,15 @@ For each project, optionally create `.fop-target` in the project root. See:
 skills/vibegogo/references/target_schema.md
 ```
 
-The most important optional field is:
+The most important optional workflow fields are:
 
 ```bash
+WORKFLOW=branch-pr
 AUTO_PUSH=false
 ```
 
-Only `AUTO_PUSH=true` allows Step 9 to run `git push`.
+With the default `WORKFLOW=branch-pr`, Step 9 pushes the feature branch so it can open a PR. `AUTO_PUSH=true` only affects `WORKFLOW=trunk`.
 
 ## Status
 
 This is an opinionated workflow extracted from real daily use. It is not a general-purpose CI/CD system. It is a guardrailed operating procedure for AI coding agents.
-

@@ -22,8 +22,21 @@ DEPLOY_COMMAND="<デプロイに使う slash command or 手順>"
 DEPLOY_TARGET="<実機 / ローカル / dev環境 等>"
 VERIFY_TYPE="<実機プレビュー / ブラウザ確認 / curl で叩く 等>"
 
-# コミット後の push 方針（任意）
-# true の場合のみ Step 9 で git push する。未設定 / false / その他の値では push しない。
+# ワークフロー（任意）。未設定時のデフォルトは branch-pr。
+#   branch-pr : Step 1 で feature ブランチを切り、Step 9 で push + PR 作成して
+#               停止する（マージ可否は人が判断、承認後にエージェントが squash マージ）。
+#               base ブランチへの直接コミット / 直接 push は hook がブロックする。
+#   trunk     : 旧挙動。現ブランチに直接コミットし、AUTO_PUSH に従って push する
+#               （PR を作らない trunk-based 運用。明示 opt-out）。
+WORKFLOW=branch-pr
+
+# ブランチ元 / PR 取り込み先（任意）。未設定時は origin の default ブランチを自動検出
+# （git symbolic-ref --short refs/remotes/origin/HEAD、取得不可なら main）。
+BASE_BRANCH=main
+
+# コミット後の push 方針（任意、WORKFLOW=trunk のときのみ意味を持つ）
+# trunk で true の場合のみ Step 9 で git push する。未設定 / false / その他では push しない。
+# branch-pr では feature ブランチ push は PR 作成に必須なため AUTO_PUSH は参照しない。
 AUTO_PUSH=false
 
 # プロジェクト固有のテストコマンドパターン（任意）
@@ -73,6 +86,10 @@ VERIFY_TYPE="ブラウザ確認"
 AUTO_PUSH=false
 ```
 
+> 上記の例はいずれも `WORKFLOW` 未設定 ＝ `branch-pr`（デフォルト）で動く。
+> 旧来の trunk 直コミット運用に固定したいプロジェクトだけ `.fop-target` に
+> `WORKFLOW=trunk` を明示する（opt-out）。
+
 ## Step 8 での読み込み手順
 
 ```bash
@@ -83,6 +100,15 @@ fi
 
 各 `VERSION_FILE_N_PATH` のファイルの `VERSION_FILE_N_KEY` を更新。新しい値は `VERSION_FORMAT` / `VERSION_EXAMPLE` を参考に生成。**必ず最新コミットより新しい値にする**（`git show HEAD:<path> | grep <key>` で現状確認）。`.fop-target` が無い場合はこのステップ全体をスキップ。
 
-## Step 9 での push 方針
+## Step 9 での push / PR 方針
 
-Step 9 では `.fop-target` の `AUTO_PUSH` を読み、`AUTO_PUSH=true` の場合のみ `git push` する。未設定、`false`、その他の値では push しない。push しなかった場合は完了報告で「push 未実行（AUTO_PUSH 未設定）」または「push 未実行（AUTO_PUSH=false）」を明記する。
+`WORKFLOW`（未設定時 `branch-pr`）で分岐する。
+
+- **`branch-pr`（デフォルト）**: Step 1 で `vibegogo/{id}` ブランチを切ってある。Step 9 は
+  そのブランチへコミット → `git push -u origin vibegogo/{id}` → `gh pr create`（base は
+  `BASE_BRANCH`）→ **PR URL を報告して停止**。マージ可否は人が判断する。人が承認したら
+  エージェントが `gh pr merge --squash --delete-branch` を実行する（GREEN だけでの自動
+  マージはしない）。`AUTO_PUSH` は参照しない（ブランチ push は PR 作成に必須）。
+- **`trunk`（明示 opt-out）**: 旧挙動。現ブランチへ直接コミットし、`AUTO_PUSH=true` の
+  場合のみ `git push` する。未設定 / `false` / その他では push しない。push しなかった
+  場合は完了報告で「push 未実行（AUTO_PUSH 未設定/false）」を明記する。

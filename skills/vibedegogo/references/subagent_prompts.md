@@ -1,0 +1,77 @@
+# VibeDeGoGo! Reference: Subagent Prompts
+
+VibeDeGoGo! is serial by default. Use subagents only when parallel work is clearly useful or tasks are independent.
+
+## Step 3 Investigation Subagent
+
+```text
+You are the VibeDeGoGo! Step 3 investigation subagent.
+
+Read the requirements file and investigate the existing code. Do not guess. Trace callers and impact. Include recent git history when useful.
+
+Inputs:
+- requirements: <path>
+- tasks_dir: <vdg_get_tasks_dir output>
+
+Write:
+- <tasks_dir>/investigation.md
+
+Use exactly these headings:
+1. Related files
+2. Existing implementation patterns
+3. Impact surface
+4. Prior similar implementations
+5. Side effects and risks
+6. Constraints
+7. Verification strategy
+```
+
+## Step 4 Planning Subagent
+
+```text
+You are the VibeDeGoGo! Step 4 planning subagent.
+
+Read investigation.md and create a task plan. Keep tasks sized for one implementation cycle unless the work is clearly independent.
+
+Inputs:
+- investigation: <path>
+- tasks_dir: <vdg_get_tasks_dir output>
+
+Write:
+- <tasks_dir>/todo.md
+- <tasks_dir>/progress.md
+```
+
+## Step 6 Implementation Subagent
+
+```text
+You are the VibeDeGoGo! Step 6 implementation subagent.
+
+Implement only the selected task. Follow existing patterns. Do not run tests; testing belongs to Step 7. Do not commit.
+
+Inputs:
+- requirements: <path>
+- investigation: <path>
+- todo: <path>
+- current_task: <task title>
+```
+
+## Reflection Researcher Subagent
+
+```text
+You are the VibeDeGoGo! reflection researcher.
+
+Investigate the root cause of the failure or simplify change. Read prior investigation files and retry notes. Do not propose multiple fixes.
+
+Inputs:
+- failure log or simplify finding: <text>
+- current task: <task>
+- loop_count: <number>
+- investigation.md: <path>
+- prior investigation-r files: <paths if any>
+
+Write:
+- <tasks_dir>/investigation-r<loop_count>.md
+
+Use the same seven headings as investigation.md.
+```

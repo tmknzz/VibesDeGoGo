@@ -1,4 +1,4 @@
-# VibeDeGoGo! Reference: Hook Rules
+# VibesDeGoGo! Reference: Hook Rules
 
 This file documents the behavior implemented by the hooks.
 
@@ -7,38 +7,38 @@ This file documents the behavior implemented by the hooks.
 State files are protected. The hooks block direct edits to:
 
 ```text
-.claude/.vdg-state-*
-.claude/.vdg-active
+.claude/.vdgg-state-*
+.claude/.vdgg-active
 ```
 
-Use `vdg_state_*` helpers instead.
+Use `vdgg_state_*` helpers instead.
 
 Step declarations are validated for Bash commands that call:
 
 ```text
-vdg_state_advance
-vdg_state_loop
-vdg_state_write
+vdgg_state_advance
+vdgg_state_loop
+vdgg_state_write
 ```
 
 The Bash command text must include the matching declaration:
 
 ```bash
-# [VibeDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
-source $HOME/.claude/skills/vibedegogo/scripts/vdg-state.sh && vdg_state_advance 3 investigating
+# [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
+source $HOME/.claude/skills/vibesdegogo/scripts/vdgg-state.sh && vdgg_state_advance 3 investigating
 ```
 
-For Step 2, `[VibeDeGoGo! Declaration]` is also accepted because it follows Step 1 initialization.
+For Step 2, `[VibesDeGoGo! Declaration]` is also accepted because it follows Step 1 initialization.
 
 ## Phase Behavior
 
 | phase | Step | Edit/Write | Bash | Agent |
 |---|---:|---|---|---|
 | no state | none | allow | allow | allow |
-| `declare` | 1 | only `tasks/vdg/{id}/` | allow except state writes | block |
-| `requirements` | 2 | only `tasks/vdg/{id}/` | require `requirements.md` before Step 3 | block |
-| `investigating` | 3 | only `tasks/vdg/{id}/` | allow except state writes | allow |
-| `planning` | 4 | only `tasks/vdg/{id}/` | allow except state writes | allow |
+| `declare` | 1 | only `tasks/vdgg/{id}/` | allow except state writes | block |
+| `requirements` | 2 | only `tasks/vdgg/{id}/` | require `requirements.md` before Step 3 | block |
+| `investigating` | 3 | only `tasks/vdgg/{id}/` | allow except state writes | allow |
+| `planning` | 4 | only `tasks/vdgg/{id}/` | allow except state writes | allow |
 | `task-selected` | 5 | block | allow except state writes | allow |
 | `implementing` | 6 | allow except state files | block commits and test commands | allow |
 | `testing` | 7 | allow except state files | block commits, direct testing to implementing, and verified without simplify | allow |
@@ -52,7 +52,7 @@ For Step 2, `[VibeDeGoGo! Declaration]` is also accepted because it follows Step
 PostToolUse detects Bash failures and writes:
 
 ```text
-.claude/.vdg-error-pending
+.claude/.vdgg-error-pending
 ```
 
 Before the next tool call, PreToolUse requires assistant text containing:
@@ -72,7 +72,7 @@ During `testing`, successful verification must be followed by the `simplify` ski
 PostToolUse creates:
 
 ```text
-.claude/.vdg-simplify-sentinel-{vdg_id}-{loop_count}
+.claude/.vdgg-simplify-sentinel-{vdgg_id}-{loop_count}
 ```
 
 Fields:

@@ -1,0 +1,260 @@
+---
+name: vibesdegogo
+description: "Use VibesDeGoGo! for Codex when the user asks Codex to carry coding work through requirements, investigation, planning, implementation, verification, progress reporting, and commit/PR with safety stops."
+version: 0.1.0
+---
+
+# VibesDeGoGo! for Codex
+
+VibesDeGoGo! for Codex is a serial, state-file-driven workflow for autonomous coding in Codex. It follows the VibesDeGoGo! for Claude Code step model first; do not simplify the workflow unless the user explicitly asks for a lighter mode.
+
+## When To Use
+
+Use this skill for coding work where the user wants Codex to continue through implementation, verification, and commit/PR.
+
+Trigger phrases include `VibesDeGoGo! for Codex`, `VibesDeGoGo!`, `/VibesDeGoGo!`, and Japanese equivalents such as `VibesDeGoGoで進めて`.
+
+Do not use it for wording-only requests, open-ended discussion, or brainstorming where no repository workflow should execute.
+
+## Important Codex Differences
+
+- State lives in `.codex/.vdgg-active` and `.codex/.vdgg-state-{id}`.
+- Task files still live in `tasks/vdgg/{id}/`.
+- Hooks are installed through `.codex/hooks.json` or Codex hook config, not Claude Code settings.
+- Codex hook coverage is a guardrail, not a complete enforcement boundary. When unsure, stop before risky work.
+- Codex does not have the exact Claude Code `simplify` gate. Use the Codex review gate in this skill instead: after verification, run a focused simplification/review pass yourself, record it with `vdgg_state_mark_reviewed`, then advance to `verified`.
+
+## Step 0: Agree On Requirements
+
+Before starting the state machine, draft and get agreement on:
+
+1. Goal: what state or user value should be achieved.
+2. Constraints: what must not change and what boundaries apply.
+3. Acceptance criteria: concrete checks that determine completion.
+
+Default constraints must include:
+
+- Prefer the target environment's standard features, components, APIs, and patterns.
+- Do not add custom UI, custom components, custom state management, custom design systems, custom utilities, or external dependencies unless the need is clear.
+- Stop before changing constraints, adding dependencies, changing API/persistence/auth/permissions/security/billing/analytics/user-data behavior, destructive operations, or broad renames.
+- Do not mark work complete without verification.
+
+Start Step 1 only after the user clearly accepts the draft.
+
+## Step 1: Formation
+
+```bash
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_init
+```
+
+For the default `branch-pr` workflow, create a feature branch after initialization and before code edits:
+
+```bash
+WORKFLOW=branch-pr
+BASE_BRANCH=""
+if [ -f .vdgg-target ]; then source .vdgg-target; fi
+if [ "${WORKFLOW:-branch-pr}" != "trunk" ]; then
+  if [ -z "${BASE_BRANCH:-}" ]; then
+    BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+    BASE_BRANCH=${BASE_BRANCH:-main}
+  fi
+  CUR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  case "$CUR" in
+    vibesdegogo/*) : ;;
+    *) git checkout -b "vibesdegogo/$(vdgg_get_id)" ;;
+  esac
+fi
+```
+
+Then output:
+
+```text
+[VibesDeGoGo! Declaration] id=<vdgg_get_id output>
+```
+
+## Step 2: Requirements
+
+Write `tasks/vdgg/{id}/requirements.md`:
+
+```markdown
+## Goal
+...
+
+## Constraints
+...
+
+## Acceptance criteria
+...
+```
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 2 Start] step=2, phase=requirements, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 2 requirements
+```
+
+## Step 3: Investigation
+
+Read actual project files. Do not guess. Trace direct callers and impact. Record unknowns explicitly in `tasks/vdgg/{id}/investigation.md`.
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 3 investigating
+```
+
+## Step 4: Planning
+
+Create `tasks/vdgg/{id}/todo.md` and `tasks/vdgg/{id}/progress.md`.
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 4 planning
+```
+
+## Step 5: Select One Task
+
+Choose one task and record it:
+
+```bash
+# [VibesDeGoGo! Step 5 Start] step=5, phase=task-selected, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 5 task-selected
+vdgg_state_write 5 task-selected 0 "T1: title"
+```
+
+## Step 6: Implement
+
+Advance before editing implementation files:
+
+```bash
+# [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 6 implementing
+```
+
+Do not run verification commands in this phase.
+
+## Step 7: Verify And Review
+
+State 1 to 3 concrete verification checks, then run them.
+
+```bash
+# [VibesDeGoGo! Step 7 Start] step=7, phase=testing, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 7 testing
+```
+
+After checks pass, do a focused simplification/review pass:
+
+- remove unnecessary complexity,
+- confirm standard-first choices,
+- confirm no constraints were violated,
+- record the review in `progress.md`.
+
+Then mark the Codex review gate:
+
+```bash
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_mark_reviewed
+```
+
+Finally advance:
+
+```bash
+# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 7 verified
+```
+
+If verification fails or review changes implementation files, go to reflection.
+
+## Step 6-R: Reflection
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 6 Start] step=6, phase=reflection, loop=<same loop>
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 6 reflection
+```
+
+Write `tasks/vdgg/{id}/investigation-r{loop}.md` and update `progress.md` with:
+
+1. Root Cause Investigation.
+2. Pattern Analysis.
+3. Hypothesis: exactly one hypothesis.
+4. Implementation plan: exactly one fix.
+
+Return to implementation:
+
+```bash
+# [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=<next loop>
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_loop 6 implementing
+```
+
+## Step 8: Progress And Validation Request
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 8 Start] step=8, phase=progress, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 8 progress
+```
+
+Update `progress.md`, update configured version files if `.vdgg-target` requires it, and ask the user for validation when needed.
+
+## Step 9: Commit
+
+Advance:
+
+```bash
+# [VibesDeGoGo! Step 9 Start] step=9, phase=commit, loop=0
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_advance 9 commit
+```
+
+Commit format:
+
+```text
+{type}: {summary}
+```
+
+Default `branch-pr` behavior:
+
+1. commit on the feature branch,
+2. push the feature branch,
+3. create a PR,
+4. report the PR URL,
+5. stop for human merge approval.
+
+`trunk` workflow is allowed only when `.vdgg-target` explicitly sets `WORKFLOW=trunk`.
+
+After PR creation or trunk commit/push decision:
+
+```bash
+source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_clear
+```
+
+## Stop Conditions
+
+Do not stop for progress confirmation. Stop intentionally with `[Intentional Stop]` before:
+
+- violating Step 0 constraints,
+- adding or changing dependencies,
+- changing API, persistence, auth, permissions, security, billing, analytics, or user-data contracts,
+- destructive operations,
+- broad renames,
+- inability to satisfy or verify acceptance criteria.
+

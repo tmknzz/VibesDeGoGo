@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.agents/skills/vibesdegogo/scripts/vdgg-hook-pretool.sh\"",
+            "timeout": 5,
+            "statusMessage": "Checking VibesDeGoGo! workflow state"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.agents/skills/vibesdegogo/scripts/vdgg-hook-posttool.sh\"",
+            "timeout": 5,
+            "statusMessage": "Recording VibesDeGoGo! tool result"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.agents/skills/vibesdegogo/scripts/vdgg-hook-stop.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

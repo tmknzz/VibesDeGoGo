@@ -1,6 +1,6 @@
-# VibeDeGoGo! Reference: .vdg-target Schema
+# VibesDeGoGo! Reference: .vdgg-target Schema
 
-`.vdg-target` is an optional project-root file. It is a Bash-sourceable KEY=VALUE file that tells Step 8 and Step 9 how to update versions, validate changes, and push work.
+`.vdgg-target` is an optional project-root file. It is a Bash-sourceable KEY=VALUE file that tells Step 8 and Step 9 how to update versions, validate changes, and push work.
 
 ## Fields
 
@@ -38,8 +38,8 @@ TEST_COMMAND_PATTERN="<extended regex>"
 ```bash
 VERSION_FILE_1_PATH=project.yml
 VERSION_FILE_1_KEY=CURRENT_PROJECT_VERSION
-VERSION_FORMAT="yyyymmdd plus sequence letter"
-VERSION_EXAMPLE="20260417D"
+VERSION_FORMAT="yyyymmdd plus two-letter sequence, starting at AA"
+VERSION_EXAMPLE="20260527AA"
 DEPLOY_COMMAND="/deploy-device"
 DEPLOY_TARGET="physical device"
 VERIFY_TYPE="device preview"
@@ -59,7 +59,7 @@ AUTO_PUSH=false
 
 `branch-pr` is the default:
 
-1. Step 1 creates a `vibedegogo/{id}` feature branch.
+1. Step 1 creates a `vibesdegogo/{id}` feature branch.
 2. Step 9 commits there.
 3. Step 9 pushes the branch and creates a PR.
 4. The agent stops. A human decides whether to merge.

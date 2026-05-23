@@ -1,6 +1,6 @@
-# VibeDeGoGo! Reference: Setup
+# VibesDeGoGo! Reference: Setup
 
-This file explains how to install VibeDeGoGo! in a Claude Code environment.
+This file explains how to install VibesDeGoGo! in a Claude Code environment.
 
 ## 1. Dependencies
 
@@ -23,7 +23,7 @@ Copy the skill folder:
 
 ```bash
 mkdir -p "$HOME/.claude/skills"
-cp -R skills/vibedegogo "$HOME/.claude/skills/vibedegogo"
+cp -R skills/vibesdegogo "$HOME/.claude/skills/vibesdegogo"
 ```
 
 ## 3. Register Hooks In `~/.claude/settings.json`
@@ -36,7 +36,7 @@ Add a PreToolUse hook:
   "hooks": [
     {
       "type": "command",
-      "command": "bash $HOME/.claude/skills/vibedegogo/scripts/vdg-hook-pretool.sh",
+      "command": "bash $HOME/.claude/skills/vibesdegogo/scripts/vdgg-hook-pretool.sh",
       "timeout": 5
     }
   ]
@@ -52,7 +52,7 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
     "hooks": [
       {
         "type": "command",
-        "command": "bash $HOME/.claude/skills/vibedegogo/scripts/vdg-hook-posttool.sh",
+        "command": "bash $HOME/.claude/skills/vibesdegogo/scripts/vdgg-hook-posttool.sh",
         "timeout": 5
       }
     ]
@@ -64,7 +64,7 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
     "hooks": [
       {
         "type": "command",
-        "command": "bash $HOME/.claude/skills/vibedegogo/scripts/vdg-hook-posttool.sh",
+        "command": "bash $HOME/.claude/skills/vibesdegogo/scripts/vdgg-hook-posttool.sh",
         "timeout": 5
       }
     ]
@@ -76,7 +76,7 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
     "hooks": [
       {
         "type": "command",
-        "command": "bash $HOME/.claude/skills/vibedegogo/scripts/vdg-hook-stop.sh",
+        "command": "bash $HOME/.claude/skills/vibesdegogo/scripts/vdgg-hook-stop.sh",
         "timeout": 5
       }
     ]
@@ -88,10 +88,10 @@ PostToolUse must match all tools, not only Bash. It must observe `Skill` calls f
 
 ## 4. Project Setup
 
-Optionally create `.vdg-target` in the project root. See `target_schema.md`.
+Optionally create `.vdgg-target` in the project root. See `target_schema.md`.
 
-The `.claude/` directory is created automatically by `vdg_state_init`.
+The `.claude/` directory is created automatically by `vdgg_state_init`.
 
 ## 5. Coexistence
 
-Do not run multiple formation workflows in the same repository at the same time. Clear the previous state with `vdg_state_clear` before switching workflows.
+Do not run multiple formation workflows in the same repository at the same time. Clear the previous state with `vdgg_state_clear` before switching workflows.

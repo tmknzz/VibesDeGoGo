@@ -1,9 +1,9 @@
-# VibeDeGoGo! Reference: Output Formats
+# VibesDeGoGo! Reference: Output Formats
 
 ## Step 0: Requirements Draft
 
 ```markdown
-## VibeDeGoGo! Step 0: Requirements
+## VibesDeGoGo! Step 0: Requirements
 
 - **Goal**:
   1. <what should be achieved>
@@ -25,7 +25,7 @@ Rules:
 ## Step 1: Formation Declaration
 
 ```text
-[VibeDeGoGo! Declaration] id=<vdg_get_id output>
+[VibesDeGoGo! Declaration] id=<vdgg_get_id output>
 
 ## Requirements
 - Goal: <agreed goal>
@@ -36,14 +36,14 @@ Rules:
 - Step 0 has been agreed with the user.
 - I will lead Steps 1, 2, 5, 8, and 9.
 - I will execute Steps 3, 4, 6, and 7 directly by default, and delegate only when parallel work clearly helps.
-- State is tracked in .claude/.vdg-state-{id}.
-- Task files are stored in tasks/vdg/{id}/.
+- State is tracked in .claude/.vdgg-state-{id}.
+- Task files are stored in tasks/vdgg/{id}/.
 ```
 
 ## Step Start Declaration
 
 ```text
-[VibeDeGoGo! Step N Start] step=N, phase=PHASE_NAME, loop=LOOP_COUNT
+[VibesDeGoGo! Step N Start] step=N, phase=PHASE_NAME, loop=LOOP_COUNT
 ```
 
 ## requirements.md
@@ -137,7 +137,7 @@ Build/version numbers:
 - <values or none configured>
 
 Technical note:
-- id: <vdg_id>
+- id: <vdgg_id>
 - commit: <summary or short hash>
 - GitHub sync: pushed / not pushed
 ```

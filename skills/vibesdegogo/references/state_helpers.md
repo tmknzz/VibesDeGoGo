@@ -1,17 +1,17 @@
-# VibeDeGoGo! Reference: State Helpers
+# VibesDeGoGo! Reference: State Helpers
 
 The state helper script is:
 
 ```bash
-source $HOME/.claude/skills/vibedegogo/scripts/vdg-state.sh
+source $HOME/.claude/skills/vibesdegogo/scripts/vdgg-state.sh
 ```
 
 ## Files
 
 ```text
-.claude/.vdg-active
-tasks/vdg/{id}/
-.claude/.vdg-state-{id}
+.claude/.vdgg-active
+tasks/vdgg/{id}/
+.claude/.vdgg-state-{id}
 ```
 
 State file format:
@@ -21,21 +21,21 @@ step=<number>
 phase=<phase>
 loop_count=<number>
 current_task=<task title>
-vdg_id=<YYYYMMDD-HHMM-xxxx>
+vdgg_id=<YYYYMMDD-HHMM-xxxx>
 last_updated=<UTC timestamp>
 ```
 
 ## Public Functions
 
 ```bash
-vdg_state_init
-vdg_state_read
-vdg_state_write <step> <phase> <loop_count> [current_task]
-vdg_state_advance <step> <phase>
-vdg_state_loop <step> <phase>
-vdg_state_clear
-vdg_get_tasks_dir
-vdg_get_id
+vdgg_state_init
+vdgg_state_read
+vdgg_state_write <step> <phase> <loop_count> [current_task]
+vdgg_state_advance <step> <phase>
+vdgg_state_loop <step> <phase>
+vdgg_state_clear
+vdgg_get_tasks_dir
+vdgg_get_id
 ```
 
 ## Transition Rules
@@ -47,18 +47,18 @@ Allowed transitions:
 - `8 -> 5` to continue with unfinished tasks,
 - `7 -> 6` for testing/reflection retry.
 
-`vdg_state_loop` increments `loop_count` and removes the old simplify sentinel for that loop.
+`vdgg_state_loop` increments `loop_count` and removes the old simplify sentinel for that loop.
 
 `8 -> 5` resets `loop_count` to 0 because a new task starts.
 
 ## Cleanup
 
-`vdg_state_init` and `vdg_state_clear` remove stale transient files:
+`vdgg_state_init` and `vdgg_state_clear` remove stale transient files:
 
 ```text
-.claude/.vdg-error-pending
-.claude/.vdg-step-block-*
-.claude/.vdg-simplify-sentinel-*
+.claude/.vdgg-error-pending
+.claude/.vdgg-step-block-*
+.claude/.vdgg-simplify-sentinel-*
 ```
 
 ## Simplify Sentinel
@@ -66,7 +66,7 @@ Allowed transitions:
 Path:
 
 ```text
-$CWD/.claude/.vdg-simplify-sentinel-{vdg_id}-{loop_count}
+$CWD/.claude/.vdgg-simplify-sentinel-{vdgg_id}-{loop_count}
 ```
 
 Fields:

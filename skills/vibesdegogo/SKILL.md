@@ -1,25 +1,25 @@
 ---
-name: "VibeDeGoGo!"
+name: "VibesDeGoGo!"
 description: "A state-and-hook workflow for Claude Code that keeps coding agents moving until done while stopping only before constraint violations."
 version: 1.7.1
 ---
 
-# VibeDeGoGo!
+# VibesDeGoGo!
 
-VibeDeGoGo! is a serial, state-file-driven workflow for autonomous coding with Claude Code. It uses a state file plus Claude Code hooks to mechanically enforce the order of work. The agent does the work directly by default, and delegates to subagents only when parallel work is clearly useful.
+VibesDeGoGo! is a serial, state-file-driven workflow for autonomous coding with Claude Code. It uses a state file plus Claude Code hooks to mechanically enforce the order of work. The agent does the work directly by default, and delegates to subagents only when parallel work is clearly useful.
 
 ## When To Use
 
-Use VibeDeGoGo! for coding work: implementation, diagnosis, refactoring, or improvement work where the agent should carry the request through to verification and commit.
+Use VibesDeGoGo! for coding work: implementation, diagnosis, refactoring, or improvement work where the agent should carry the request through to verification and commit.
 
 Do not use it for wording-only requests, open-ended discussion, or brainstorming where no code or repository workflow should be executed.
 
-Trigger phrases include `/VibeDeGoGo!`, "use VibeDeGoGo!", and similar requests.
+Trigger phrases include `/VibesDeGoGo!`, "use VibesDeGoGo!", and similar requests.
 
 ## Agent Role
 
 - Declare before acting: output a Step declaration at the beginning of each Step.
-- Update the state file: every Step start and completion must update state through `vdg_state_*` helpers.
+- Update the state file: every Step start and completion must update state through `vdgg_state_*` helpers.
 - Lead Steps 1, 2, 5, 8, and 9 directly.
 - Execute Steps 3, 4, 6, and 7 directly unless delegation is clearly better.
 - Delegate only when parallel execution helps or when multiple independent tasks can safely run at the same time.
@@ -39,7 +39,7 @@ If existing custom implementation is found, record in `investigation.md` whether
 
 ## Self-Maintenance Mode
 
-Use this mode only when changing VibeDeGoGo! itself under `skills/vibedegogo/`.
+Use this mode only when changing VibesDeGoGo! itself under `skills/vibesdegogo/`.
 
 Rules:
 
@@ -80,18 +80,18 @@ Escalate to full flow if tests fail twice, scope expands, specification or compa
 
 ## State Layout
 
-Each VibeDeGoGo! session has a unique ID in this format: `YYYYMMDD-HHMM-xxxx`.
+Each VibesDeGoGo! session has a unique ID in this format: `YYYYMMDD-HHMM-xxxx`.
 
 ```text
-.claude/.vdg-active              current VibeDeGoGo! ID
-.claude/.vdg-state-{id}          state file for that ID
-tasks/vdg/{id}/requirements.md   fixed Goal / Constraints / Acceptance criteria
-tasks/vdg/{id}/investigation.md  Step 3 investigation report
-tasks/vdg/{id}/todo.md           task list
-tasks/vdg/{id}/progress.md       progress and retry notes
+.claude/.vdgg-active              current VibesDeGoGo! ID
+.claude/.vdgg-state-{id}          state file for that ID
+tasks/vdgg/{id}/requirements.md   fixed Goal / Constraints / Acceptance criteria
+tasks/vdgg/{id}/investigation.md  Step 3 investigation report
+tasks/vdgg/{id}/todo.md           task list
+tasks/vdgg/{id}/progress.md       progress and retry notes
 ```
 
-State files are KEY=VALUE text files with these fields: `step`, `phase`, `loop_count`, `current_task`, `vdg_id`, and `last_updated`.
+State files are KEY=VALUE text files with these fields: `step`, `phase`, `loop_count`, `current_task`, `vdgg_id`, and `last_updated`.
 
 See `references/state_helpers.md` for helper details.
 
@@ -116,13 +116,13 @@ See `references/state_helpers.md` for helper details.
 Step 1 uses the formation declaration:
 
 ```text
-[VibeDeGoGo! Declaration] id=<vdg_get_id output>
+[VibesDeGoGo! Declaration] id=<vdgg_get_id output>
 ```
 
 Steps 2 and later use this one-line format:
 
 ```text
-[VibeDeGoGo! Step N Start] step=N, phase=PHASE_NAME, loop=LOOP_COUNT
+[VibesDeGoGo! Step N Start] step=N, phase=PHASE_NAME, loop=LOOP_COUNT
 ```
 
 The hooks validate declarations inside Bash command text for state transitions. Use the exact strings above.
@@ -144,15 +144,15 @@ Step 0 is not mechanically enforced because no state file exists yet.
 Initialize state:
 
 ```bash
-source $HOME/.claude/skills/vibedegogo/scripts/vdg-state.sh
-vdg_state_init
+source $HOME/.claude/skills/vibesdegogo/scripts/vdgg-state.sh
+vdgg_state_init
 ```
 
-For the default `branch-pr` workflow, create a feature branch after `vdg_state_init` and before any code editing:
+For the default `branch-pr` workflow, create a feature branch after `vdgg_state_init` and before any code editing:
 
 ```bash
 WORKFLOW=branch-pr; BASE_BRANCH=""
-if [ -f "$(pwd)/.vdg-target" ]; then source "$(pwd)/.vdg-target"; fi
+if [ -f "$(pwd)/.vdgg-target" ]; then source "$(pwd)/.vdgg-target"; fi
 if [ "${WORKFLOW:-branch-pr}" != "trunk" ]; then
     if [ -z "${BASE_BRANCH:-}" ]; then
         BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
@@ -160,8 +160,8 @@ if [ "${WORKFLOW:-branch-pr}" != "trunk" ]; then
     fi
     CUR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
     case "$CUR" in
-        vibedegogo/*) : ;;
-        *) git checkout -b "vibedegogo/$(vdg_get_id)" ;;
+        vibesdegogo/*) : ;;
+        *) git checkout -b "vibesdegogo/$(vdgg_get_id)" ;;
     esac
 fi
 ```
@@ -170,7 +170,7 @@ Then output the Step 1 declaration from `references/output_formats.md`.
 
 ## Step 2: Write Requirements
 
-Write Step 0's agreed content to `tasks/vdg/{id}/requirements.md` with exactly these headings:
+Write Step 0's agreed content to `tasks/vdgg/{id}/requirements.md` with exactly these headings:
 
 ```markdown
 ## Goal
@@ -186,15 +186,15 @@ Write Step 0's agreed content to `tasks/vdg/{id}/requirements.md` with exactly t
 Then advance:
 
 ```bash
-# [VibeDeGoGo! Step 2 Start] step=2, phase=requirements, loop=0
-vdg_state_advance 2 requirements
+# [VibesDeGoGo! Step 2 Start] step=2, phase=requirements, loop=0
+vdgg_state_advance 2 requirements
 ```
 
 The hook blocks Step 3 until `requirements.md` exists.
 
 ## Step 3: Deep Investigation
 
-Investigate existing code related to the requirements and write `tasks/vdg/{id}/investigation.md`.
+Investigate existing code related to the requirements and write `tasks/vdgg/{id}/investigation.md`.
 
 Investigation rules:
 
@@ -206,15 +206,15 @@ Investigation rules:
 Then advance:
 
 ```bash
-# [VibeDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
-vdg_state_advance 3 investigating
+# [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
+vdgg_state_advance 3 investigating
 ```
 
 Use subagents only when parallel investigation clearly helps.
 
 ## Step 4: Planning
 
-Use `investigation.md` to create `tasks/vdg/{id}/todo.md` and `tasks/vdg/{id}/progress.md`.
+Use `investigation.md` to create `tasks/vdgg/{id}/todo.md` and `tasks/vdgg/{id}/progress.md`.
 
 Task sizing:
 
@@ -225,8 +225,8 @@ Task sizing:
 Then advance:
 
 ```bash
-# [VibeDeGoGo! Step 4 Start] step=4, phase=planning, loop=0
-vdg_state_advance 4 planning
+# [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0
+vdgg_state_advance 4 planning
 ```
 
 ## Step 5: Select One Task
@@ -234,9 +234,9 @@ vdg_state_advance 4 planning
 Choose one task from `todo.md` and record it in state:
 
 ```bash
-# [VibeDeGoGo! Step 5 Start] step=5, phase=task-selected, loop=0
-vdg_state_advance 5 task-selected
-vdg_state_write 5 task-selected <loop_count> "T1: title"
+# [VibesDeGoGo! Step 5 Start] step=5, phase=task-selected, loop=0
+vdgg_state_advance 5 task-selected
+vdgg_state_write 5 task-selected <loop_count> "T1: title"
 ```
 
 ## Step 6: Implement
@@ -244,8 +244,8 @@ vdg_state_write 5 task-selected <loop_count> "T1: title"
 Implement the selected task and write tests where appropriate.
 
 ```bash
-# [VibeDeGoGo! Step 6 Start] step=6, phase=implementing, loop=0
-vdg_state_advance 6 implementing
+# [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=0
+vdgg_state_advance 6 implementing
 ```
 
 Do not run tests in `implementing`; the hook blocks test commands until Step 7.
@@ -255,34 +255,34 @@ Do not run tests in `implementing`; the hook blocks test commands until Step 7.
 Before running verification, state 1 to 3 concrete checks. Then run tests, builds, smoke checks, or manual checks as appropriate.
 
 ```bash
-# [VibeDeGoGo! Step 7 Start] step=7, phase=testing, loop=0
-vdg_state_advance 7 testing
+# [VibesDeGoGo! Step 7 Start] step=7, phase=testing, loop=0
+vdgg_state_advance 7 testing
 ```
 
 After all checks pass, run the `simplify` skill as a quality gate. The PostToolUse hook records a sentinel file:
 
 ```text
-.claude/.vdg-simplify-sentinel-{vdg_id}-{loop_count}
+.claude/.vdgg-simplify-sentinel-{vdgg_id}-{loop_count}
 ```
 
 Outcomes:
 
-- Sentinel missing: `vdg_state_advance 7 verified` is blocked.
+- Sentinel missing: `vdgg_state_advance 7 verified` is blocked.
 - `modified=0`: verified transition is allowed.
 - `modified=1`: verified transition is blocked; go through reflection and re-test.
 
 After successful verification and simplify review:
 
 ```bash
-# [VibeDeGoGo! Step 7 Start] step=7, phase=verified, loop=0
-vdg_state_advance 7 verified
+# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0
+vdgg_state_advance 7 verified
 ```
 
 If testing fails, or simplify changed code, go to reflection:
 
 ```bash
-# [VibeDeGoGo! Step 6 Start] step=6, phase=reflection, loop=<same loop>
-vdg_state_advance 6 reflection
+# [VibesDeGoGo! Step 6 Start] step=6, phase=reflection, loop=<same loop>
+vdgg_state_advance 6 reflection
 ```
 
 ## Step 6-R: Reflection
@@ -294,7 +294,7 @@ At the beginning of reflection, start a researcher subagent for root-cause inves
 The researcher must write:
 
 ```text
-tasks/vdg/{id}/investigation-r{loop_count}.md
+tasks/vdgg/{id}/investigation-r{loop_count}.md
 ```
 
 Then append four items to `progress.md`:
@@ -315,8 +315,8 @@ Forbidden in reflection:
 Return to implementation with loop increment:
 
 ```bash
-# [VibeDeGoGo! Step 6 Start] step=6, phase=implementing, loop=<next loop>
-vdg_state_loop 6 implementing
+# [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=<next loop>
+vdgg_state_loop 6 implementing
 ```
 
 The hook checks that `progress.md` and `investigation-r{loop_count}.md` were updated during reflection.
@@ -326,11 +326,11 @@ The hook checks that `progress.md` and `investigation-r{loop_count}.md` were upd
 Advance:
 
 ```bash
-# [VibeDeGoGo! Step 8 Start] step=8, phase=progress, loop=0
-vdg_state_advance 8 progress
+# [VibesDeGoGo! Step 8 Start] step=8, phase=progress, loop=0
+vdgg_state_advance 8 progress
 ```
 
-Read `.vdg-target` if it exists. If version files are configured, update their configured keys and make the new value newer than `HEAD`.
+Read `.vdgg-target` if it exists. If version files are configured, update their configured keys and make the new value newer than `HEAD`.
 
 Ask the user for validation according to `DEPLOY_COMMAND`, `DEPLOY_TARGET`, and `VERIFY_TYPE`. If no target is configured, ask how they want to validate.
 
@@ -344,8 +344,8 @@ Update `progress.md` and check whether all tasks are complete:
 Advance:
 
 ```bash
-# [VibeDeGoGo! Step 9 Start] step=9, phase=commit, loop=0
-vdg_state_advance 9 commit
+# [VibesDeGoGo! Step 9 Start] step=9, phase=commit, loop=0
+vdgg_state_advance 9 commit
 ```
 
 Commit on the feature branch. Include version files if Step 8 changed them.
@@ -371,14 +371,14 @@ Do not merge automatically just because CI is green.
 
 ### trunk workflow
 
-Only when `.vdg-target` explicitly sets `WORKFLOW=trunk`, commit directly on the current branch. Push only when `AUTO_PUSH=true`.
+Only when `.vdgg-target` explicitly sets `WORKFLOW=trunk`, commit directly on the current branch. Push only when `AUTO_PUSH=true`.
 
 ## Clear State And Finish
 
 After PR creation or trunk commit/push decision:
 
 ```bash
-vdg_state_clear
+vdgg_state_clear
 ```
 
 Then provide a friendly completion report: what finished, what was verified, what the user needs to do next, build/version numbers if any, and short technical details.

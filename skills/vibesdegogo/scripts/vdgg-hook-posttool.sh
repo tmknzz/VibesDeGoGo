@@ -1,51 +1,51 @@
 #!/bin/bash
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 
 set -euo pipefail
 
 INPUT=$(cat)
 
 if ! command -v jq &> /dev/null; then
-    # VibeDeGoGo hook/state logic.
-    # VibeDeGoGo hook/state logic.
+    # VibesDeGoGo hook/state logic.
+    # VibesDeGoGo hook/state logic.
     FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
     FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
     if command -v brew &> /dev/null; then
-        ( brew install jq > /tmp/vdg-jq-install.log 2>&1 & )
-        echo "vdg-hook-posttool: jq not found. Auto-installing in background (brew install jq, log: /tmp/vdg-jq-install.log)。" >&2
+        ( brew install jq > /tmp/vdgg-jq-install.log 2>&1 & )
+        echo "vdgg-hook-posttool: jq not found. Auto-installing in background (brew install jq, log: /tmp/vdgg-jq-install.log)。" >&2
     else
-        echo "vdg-hook-posttool: jq required but brew not found. Install jq manually." >&2
+        echo "vdgg-hook-posttool: jq required but brew not found. Install jq manually." >&2
     fi
     if [ "$FALLBACK_TOOL" = "Bash" ] && printf '%s' "$FALLBACK_CMD" | grep -qE 'brew[[:space:]]+(install|reinstall)([[:space:]]|[^|;&])*[[:space:]]jq([[:space:]]|$)'; then
         exit 0
     fi
-    echo "vdg hook: jq is required. Install jq and retry." >&2
+    echo "vdgg hook: jq is required. Install jq and retry." >&2
     exit 2
 fi
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 HOOK_EVENT_NAME=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 if [ -z "$CWD" ]; then
     exit 0
 fi
 
-# VibeDeGoGo hook/state logic.
-ACTIVE_FILE="$CWD/.claude/.vdg-active"
+# VibesDeGoGo hook/state logic.
+ACTIVE_FILE="$CWD/.claude/.vdgg-active"
 if [ ! -f "$ACTIVE_FILE" ]; then
     exit 0
 fi
 
-VDG_ID=$(cat "$ACTIVE_FILE")
-if [ -z "$VDG_ID" ]; then
+VDGG_ID=$(cat "$ACTIVE_FILE")
+if [ -z "$VDGG_ID" ]; then
     exit 0
 fi
 
-# VibeDeGoGo hook/state logic.
-STATE_FILE="$CWD/.claude/.vdg-state-${VDG_ID}"
+# VibesDeGoGo hook/state logic.
+STATE_FILE="$CWD/.claude/.vdgg-state-${VDGG_ID}"
 if [ ! -f "$STATE_FILE" ]; then
     exit 0
 fi
@@ -59,10 +59,10 @@ if [ -z "$PHASE" ]; then
     exit 0
 fi
 
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$PHASE" != "testing" ]; then
     if [ "$TOOL_NAME" != "Bash" ]; then
         exit 0
@@ -83,19 +83,19 @@ STDERR=$(echo "$INPUT" | jq -r '.tool_response.stderr // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // empty')
 HOOK_ERROR=$(echo "$INPUT" | jq -r '.error // empty')
 
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$PHASE" = "testing" ] && [ "$TOOL_NAME" = "Skill" ]; then
     SKILL_NAME=$(echo "$INPUT" | jq -r '.tool_input.skill // empty')
     if [ "$SKILL_NAME" = "simplify" ]; then
-        SENTINEL_FILE="$CWD/.claude/.vdg-simplify-sentinel-${VDG_ID}-${LOOP_COUNT}"
+        SENTINEL_FILE="$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}"
         if [ ! -f "$SENTINEL_FILE" ]; then
             STARTED_AT=$(date -u +%FT%TZ)
             cat > "$SENTINEL_FILE" <<EOF
@@ -109,24 +109,24 @@ EOF
     fi
 fi
 
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; }; then
-    SENTINEL_FILE="$CWD/.claude/.vdg-simplify-sentinel-${VDG_ID}-${LOOP_COUNT}"
+    SENTINEL_FILE="$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}"
     if [ -f "$SENTINEL_FILE" ]; then
         EDITED_FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-        # VibeDeGoGo hook/state logic.
-        if [[ "$EDITED_FILE_PATH" == *"/.vdg-state-"* ]] || [[ "$EDITED_FILE_PATH" == *"/.vdg-active"* ]]; then
+        # VibesDeGoGo hook/state logic.
+        if [[ "$EDITED_FILE_PATH" == *"/.vdgg-state-"* ]] || [[ "$EDITED_FILE_PATH" == *"/.vdgg-active"* ]]; then
             exit 0
         fi
-        # VibeDeGoGo hook/state logic.
-        TASKS_DIR_BASENAME="tasks/vdg/${VDG_ID}"
+        # VibesDeGoGo hook/state logic.
+        TASKS_DIR_BASENAME="tasks/vdgg/${VDGG_ID}"
         if [[ "$EDITED_FILE_PATH" == *"$TASKS_DIR_BASENAME"* ]]; then
             exit 0
         fi
-        # VibeDeGoGo hook/state logic.
+        # VibesDeGoGo hook/state logic.
         CURRENT_FILES=$(grep '^modified_files=' "$SENTINEL_FILE" | head -1 | sed 's/^modified_files=//')
         if [ -n "$EDITED_FILE_PATH" ] && [[ ",$CURRENT_FILES," != *",$EDITED_FILE_PATH,"* ]]; then
             if [ -z "$CURRENT_FILES" ]; then
@@ -137,7 +137,7 @@ if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "
         else
             NEW_FILES="$CURRENT_FILES"
         fi
-        # VibeDeGoGo hook/state logic.
+        # VibesDeGoGo hook/state logic.
         TMP=$(mktemp)
         grep -v '^modified=' "$SENTINEL_FILE" | grep -v '^modified_files=' > "$TMP" || true
         cat >> "$TMP" <<EOF
@@ -153,27 +153,27 @@ if [ "$TOOL_NAME" != "Bash" ]; then
     exit 0
 fi
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 SEARCH_CMDS_PATTERN='(^|[[:space:];&|(])(grep|rg|ag|ack|find|awk|sed|fgrep|egrep|jq|test|\[)([[:space:]]|$)'
 IS_SEARCH=0
 if echo "$COMMAND" | grep -qE "$SEARCH_CMDS_PATTERN"; then
     IS_SEARCH=1
 fi
 
-# VibeDeGoGo hook/state logic.
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if echo "$COMMAND" | grep -qE 'fo[a-z]_state_(init|write|advance|loop|clear|read)'; then
     exit 0
 fi
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 ERROR_DETECTED=0
 ERROR_REASON=""
 
 if [ "$EXIT_CODE" -ne 0 ]; then
-    # VibeDeGoGo hook/state logic.
+    # VibesDeGoGo hook/state logic.
     if [ "$IS_SEARCH" -eq 1 ] && [ "$EXIT_CODE" -lt 2 ]; then
-        : # VibeDeGoGo hook/state logic.
+        : # VibesDeGoGo hook/state logic.
     else
         ERROR_DETECTED=1
         ERROR_REASON="exit code=$EXIT_CODE"
@@ -189,7 +189,7 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$HOOK_EVENT_NAME" = "PostToolUseFailure" ];
     fi
 fi
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     if echo "$STDERR" | grep -qE '(^|[^a-zA-Z])(error|Error|ERROR|fail|Fail|FAIL|Exception|Traceback)([^a-zA-Z]|$)'; then
         ERROR_DETECTED=1
@@ -197,7 +197,7 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     fi
 fi
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     if echo "$STDOUT" | grep -qE '^[[:space:]]*(error|Error|ERROR|fail|Fail|FAIL):[[:space:]]'; then
         ERROR_DETECTED=1
@@ -205,9 +205,9 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     fi
 fi
 
-# VibeDeGoGo hook/state logic.
+# VibesDeGoGo hook/state logic.
 if [ "$ERROR_DETECTED" -eq 1 ]; then
-    FLAG_FILE="$CWD/.claude/.vdg-error-pending"
+    FLAG_FILE="$CWD/.claude/.vdgg-error-pending"
     {
         echo "reason=$ERROR_REASON"
         echo "command=$COMMAND"

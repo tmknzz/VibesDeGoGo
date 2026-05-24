@@ -20,9 +20,21 @@ Do not use it for wording-only requests, open-ended discussion, or brainstorming
 
 - State lives in `.codex/.vdgg-active` and `.codex/.vdgg-state-{id}`.
 - Task files still live in `tasks/vdgg/{id}/`.
-- Hooks are installed through `.codex/hooks.json` or Codex hook config, not Claude Code settings.
+- Prefer global hooks in `~/.codex/hooks.json` or `~/.codex/config.toml` so VDGG rules apply across repositories. Repo-local `.codex/hooks.json` is optional and only covers that repository after trust.
+- Hook commands should call the installed skill path, normally `$HOME/.codex/skills/vibesdegogo`, or set `VDGG_CODEX_SKILL_DIR` to an absolute skill directory. Do not assume the target project contains `.agents/skills/vibesdegogo`.
 - Codex hook coverage is a guardrail, not a complete enforcement boundary. When unsure, stop before risky work.
 - Codex does not have the exact Claude Code `simplify` gate. Use the Codex review gate in this skill instead: after verification, run a focused simplification/review pass yourself, record it with `vdgg_state_mark_reviewed`, then advance to `verified`.
+
+Use this resolver inside every shell command that calls state helpers:
+
+```bash
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+if [ ! -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ]; then
+  VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+fi
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
+```
 
 ## Step 0: Agree On Requirements
 
@@ -41,10 +53,17 @@ Default constraints must include:
 
 Start Step 1 only after the user clearly accepts the draft.
 
+Do not create or advance `.codex/.vdgg-*` state files, create task files, switch branches, or edit implementation files before Step 0 is accepted. Step 0 happens before state exists, so hooks cannot fully enforce it; the agent must stop itself here.
+
 ## Step 1: Formation
 
 ```bash
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+if [ ! -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ]; then
+  VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+fi
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_init
 ```
 
@@ -92,7 +111,10 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 2 Start] step=2, phase=requirements, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 2 requirements
 ```
 
@@ -104,7 +126,10 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 3 investigating
 ```
 
@@ -116,17 +141,30 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 4 planning
 ```
 
 ## Step 5: Select One Task
 
+Choose exactly one task sized for a full implementation cycle:
+
+- one task must be small enough to complete implementation, tests, build, and real/manual check in one Step 6 to Step 8 loop;
+- split separate provider/API/auth/key-storage/UI/persistence/versioning risks into separate tasks;
+- do not select umbrella tasks such as `T1-T3` or "all model providers";
+- if the selected task cannot be verified with the current acceptance criteria in one Step 7, split it before Step 6.
+
 Choose one task and record it:
 
 ```bash
 # [VibesDeGoGo! Step 5 Start] step=5, phase=task-selected, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 5 task-selected
 vdgg_state_write 5 task-selected 0 "T1: title"
 ```
@@ -137,7 +175,10 @@ Advance before editing implementation files:
 
 ```bash
 # [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 6 implementing
 ```
 
@@ -149,7 +190,10 @@ State 1 to 3 concrete verification checks, then run them.
 
 ```bash
 # [VibesDeGoGo! Step 7 Start] step=7, phase=testing, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 7 testing
 ```
 
@@ -163,7 +207,10 @@ After checks pass, do a focused simplification/review pass:
 Then mark the Codex review gate:
 
 ```bash
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_mark_reviewed
 ```
 
@@ -171,7 +218,10 @@ Finally advance:
 
 ```bash
 # [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 7 verified
 ```
 
@@ -183,7 +233,10 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 6 Start] step=6, phase=reflection, loop=<same loop>
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 6 reflection
 ```
 
@@ -198,7 +251,10 @@ Return to implementation:
 
 ```bash
 # [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=<next loop>
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_loop 6 implementing
 ```
 
@@ -208,7 +264,10 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 8 Start] step=8, phase=progress, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 8 progress
 ```
 
@@ -220,7 +279,10 @@ Advance:
 
 ```bash
 # [VibesDeGoGo! Step 9 Start] step=9, phase=commit, loop=0
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 9 commit
 ```
 
@@ -243,7 +305,10 @@ Default `branch-pr` behavior:
 After PR creation or trunk commit/push decision:
 
 ```bash
-source .agents/skills/vibesdegogo/scripts/vdgg-state.sh
+VDGG_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.codex/skills/vibesdegogo}"
+[ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
+source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_clear
 ```
 
@@ -257,4 +322,3 @@ Do not stop for progress confirmation. Stop intentionally with `[Intentional Sto
 - destructive operations,
 - broad renames,
 - inability to satisfy or verify acceptance criteria.
-

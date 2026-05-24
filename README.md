@@ -5,7 +5,7 @@ VibesDeGoGo! is a state-and-hook workflow that keeps AI coding agents moving unt
 This repository currently contains two editions:
 
 - **VibesDeGoGo! for Claude Code:** the original Claude Code skill and hook workflow in `skills/vibesdegogo/`.
-- **VibesDeGoGo! for Codex:** the Codex skill and hook workflow in `.agents/skills/vibesdegogo/` and `.codex/hooks.json`.
+- **VibesDeGoGo! for Codex:** the Codex skill and hook workflow in `.agents/skills/vibesdegogo/`, with global hooks recommended and `.codex/hooks.json` available for this repository.
 
 It exists because vibe coding is powerful, but AI agents can skip the boring parts: requirements, investigation, verification, and clear handoff. VibesDeGoGo! turns those parts into rails.
 
@@ -87,13 +87,22 @@ skills/vibesdegogo/references/setup.md
 
 ## Install: VibesDeGoGo! for Codex
 
-Codex reads repository skills from `.agents/skills`, so the Codex edition is already present in this repository:
+For cross-repository use, install the Codex edition as a user skill:
+
+```bash
+mkdir -p "$HOME/.codex/skills"
+cp -R .agents/skills/vibesdegogo "$HOME/.codex/skills/vibesdegogo"
+```
+
+Codex also reads repository skills from `.agents/skills`, so the Codex edition is present in this repository for development:
 
 ```text
 .agents/skills/vibesdegogo/
 ```
 
-Codex also reads project-local hooks from `.codex/hooks.json` after the project hook definitions are reviewed and trusted:
+For normal Codex use, install global hooks in `~/.codex/hooks.json` or `~/.codex/config.toml` so VDGG rules apply across repositories. The hook scripts no-op unless the current repository has `.codex/.vdgg-active`.
+
+This repository also includes project-local hooks in `.codex/hooks.json` after the project hook definitions are reviewed and trusted:
 
 ```text
 .codex/hooks.json

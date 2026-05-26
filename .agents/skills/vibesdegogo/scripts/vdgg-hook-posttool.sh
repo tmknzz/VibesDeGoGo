@@ -4,6 +4,8 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
+  # jq missing: do not block. Pretool surfaces the install hint when a tool call
+  # actually requires hook enforcement.
   exit 0
 fi
 

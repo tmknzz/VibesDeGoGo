@@ -8,7 +8,9 @@ VDGG_TASKS_DIR="${VDGG_TASKS_DIR:-${VDGG_CWD}/tasks/vdgg}"
 _vdgg_generate_id() {
   local timestamp random
   timestamp=$(date +%Y%m%d-%H%M)
-  random=$(LC_ALL=C od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+  # Truncate to 4 hex chars to match the documented YYYYMMDD-HHMM-xxxx format
+  # and stay in parity with the Claude edition.
+  random=$(LC_ALL=C od -An -N8 -tx1 /dev/urandom | tr -d ' \n' | cut -c1-4)
   echo "${timestamp}-${random}"
 }
 

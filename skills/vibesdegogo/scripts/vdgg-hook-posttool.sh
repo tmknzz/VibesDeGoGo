@@ -6,20 +6,18 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-if ! command -v jq &> /dev/null; then
-    # Best-effort fallback parser so a missing jq can still allow `brew install jq`.
-    FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
-    FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
-    if command -v brew &> /dev/null; then
-        ( brew install jq > /tmp/vdgg-jq-install.log 2>&1 & )
-        echo "vdgg-hook-posttool: jq not found. Auto-installing in background (brew install jq, log: /tmp/vdgg-jq-install.log)。" >&2
-    else
-        echo "vdgg-hook-posttool: jq required but brew not found. Install jq manually." >&2
-    fi
-    if [ "$FALLBACK_TOOL" = "Bash" ] && printf '%s' "$FALLBACK_CMD" | grep -qE 'brew[[:space:]]+(install|reinstall)([[:space:]]|[^|;&])*[[:space:]]jq([[:space:]]|$)'; then
+if ! command -v jq >/dev/null 2>&1; then
+    # Allow the current Bash command through if it is itself an attempt to install jq.
+    if printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]*(brew[[:space:]]+(install|reinstall)|apt(-get)?[[:space:]]+install|apk[[:space:]]+add|dnf[[:space:]]+install|yum[[:space:]]+install|pacman[[:space:]]+-S)[[:space:]]+[^"]*jq'; then
         exit 0
     fi
-    echo "vdgg hook: jq is required. Install jq and retry." >&2
+    {
+        echo "VibesDeGoGo! hook: jq is required for hooks but was not found on PATH."
+        echo "  macOS:               brew install jq"
+        echo "  Debian/Ubuntu/WSL:   sudo apt-get install jq"
+        echo "  Alpine:              apk add jq"
+        echo "  Fedora/RHEL:         sudo dnf install jq"
+    } >&2
     exit 2
 fi
 

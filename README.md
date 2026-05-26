@@ -83,7 +83,15 @@ Then register the hooks shown in:
 skills/vibesdegogo/references/setup.md
 ```
 
-`jq` is required because the hooks parse Claude Code hook JSON.
+`jq` is required because the hooks parse Claude Code hook JSON. If it is not
+already installed, pick the command for your platform:
+
+```bash
+brew install jq               # macOS
+sudo apt-get install jq       # Debian / Ubuntu / WSL
+apk add jq                    # Alpine
+sudo dnf install jq           # Fedora / RHEL
+```
 
 ## Install: VibesDeGoGo! for Codex
 
@@ -114,7 +122,8 @@ In Codex, use `/hooks` to review and trust the hook definitions. See:
 .agents/skills/vibesdegogo/references/codex-setup.md
 ```
 
-`jq` is required because the hooks parse Codex hook JSON.
+`jq` is required because the hooks parse Codex hook JSON. See the Claude Code
+section above for per-platform install commands.
 
 ## Project Configuration
 

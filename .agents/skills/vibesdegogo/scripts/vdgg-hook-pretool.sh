@@ -4,7 +4,17 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "VibesDeGoGo! for Codex: jq is required for hooks." >&2
+  # Allow the current command through if it is itself an attempt to install jq.
+  if printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]*(brew[[:space:]]+(install|reinstall)|apt(-get)?[[:space:]]+install|apk[[:space:]]+add|dnf[[:space:]]+install|yum[[:space:]]+install|pacman[[:space:]]+-S)[[:space:]]+[^"]*jq'; then
+    exit 0
+  fi
+  {
+    echo "VibesDeGoGo! for Codex: jq is required for hooks but was not found on PATH."
+    echo "  macOS:               brew install jq"
+    echo "  Debian/Ubuntu/WSL:   sudo apt-get install jq"
+    echo "  Alpine:              apk add jq"
+    echo "  Fedora/RHEL:         sudo dnf install jq"
+  } >&2
   exit 2
 fi
 

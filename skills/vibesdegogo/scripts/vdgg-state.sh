@@ -32,6 +32,12 @@ _vdgg_state_file_for_id() {
     echo "${VDGG_STATE_DIR}/.vdgg-state-${id}"
 }
 
+_vdgg_review_file_for_id() {
+    local id="$1"
+    local loop="$2"
+    echo "${VDGG_STATE_DIR}/.vdgg-review-sentinel-${id}-${loop}"
+}
+
 # Remove matched state sidecar files without requiring a shell glob to expand.
 # This keeps cleanup quiet when no matching files exist.
 _vdgg_rm_glob() {
@@ -111,6 +117,7 @@ vdgg_state_init() {
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-step-block-*'
     rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
 
     # Store the active id before writing the state file.
     echo "$id" > "$active_file"
@@ -269,9 +276,34 @@ vdgg_state_loop() {
     vdgg_id=$(_vdgg_get_active_id)
     if [ -n "$vdgg_id" ]; then
         rm -f "${VDGG_STATE_DIR}/.vdgg-simplify-sentinel-${vdgg_id}-${current_loop}" 2>/dev/null || true
+        rm -f "${VDGG_STATE_DIR}/.vdgg-review-sentinel-${vdgg_id}-${current_loop}" 2>/dev/null || true
     fi
 
     vdgg_state_write "$loop_step" "$loop_phase" "$new_loop" "$current_task"
+}
+
+vdgg_state_mark_reviewed() {
+    local state_file
+    state_file=$(_vdgg_get_state_file)
+    if [ -z "$state_file" ] || [ ! -f "$state_file" ]; then
+        echo "vdgg_state_mark_reviewed: state file not found" >&2
+        return 1
+    fi
+
+    local id
+    id=$(_vdgg_get_active_id)
+    local loop
+    loop=$(grep "^loop_count=" "$state_file" | cut -d= -f2)
+    loop="${loop:-0}"
+
+    local review_file
+    review_file=$(_vdgg_review_file_for_id "$id" "$loop")
+    cat > "$review_file" << EOF
+started=1
+started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+reviewed=1
+EOF
+    echo "vdgg-state: review gate marked for id=${id}, loop=${loop}" >&2
 }
 
 vdgg_state_clear() {
@@ -296,6 +328,7 @@ vdgg_state_clear() {
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-step-block-*'
     rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
 
     echo "vdgg-state: cleared (id=$id)" >&2
 }

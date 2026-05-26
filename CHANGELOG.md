@@ -5,6 +5,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-26
+
 ### Added
 
 - Zero-dependency bash smoke tests for state helpers and hook phase guards.

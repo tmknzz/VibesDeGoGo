@@ -15,6 +15,23 @@ https://keepachangelog.com/en/1.1.0/
 
 - Restored meaningful Claude hook/state script comments damaged during rename.
 - Replaced the leftover legacy formation regex with `vdgg_state_*` matching.
+- `PostToolUseFailure` posttool branch now honors the same `IS_SEARCH`
+  exception as the standard `EXIT_CODE` branch, so search no-match (exit 1)
+  from `grep`/`find`/etc. no longer raises the error-pending flag and
+  blocks follow-up tools.
+- Pretool's direct state-file edit guard treats fd-merge redirects
+  (`2>&1`, `>&2`) as non-destructive by changing the redirect detector
+  from `>` to `>[^&]`. Diagnostic commands that merely mention state-file
+  paths now pass through.
+- Pretool's direct state-file edit guard exempts `git commit`, so a commit
+  message that legitimately mentions a state-file path is no longer
+  treated as a destructive edit. Other commit-phase rules still apply.
+- Posttool's testing-phase Edit/Write tracking now excludes the simplify
+  sentinel itself, preventing a self-referential `modified=1` loop when
+  the sentinel is created via Edit/Write (e.g. environments without the
+  `simplify` Skill tool).
+- Codex pretool received the same redirect and `git commit` exemptions
+  for parity.
 
 ## [0.1.0] - 2026-05-25
 

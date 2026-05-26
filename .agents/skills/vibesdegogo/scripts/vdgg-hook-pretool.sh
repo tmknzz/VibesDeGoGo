@@ -66,8 +66,13 @@ if [ "$TOOL_NAME" = "Bash" ] && [ -f "$CWD/.codex/.vdgg-error-pending" ]; then
 fi
 
 if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$COMMAND" | grep -qE '(\.codex/\.vdgg-state-|\.codex/\.vdgg-active)'; then
-  if printf '%s' "$COMMAND" | grep -qE '(>|>>|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
-    block "Direct state-file edits are blocked. Use vdgg_state_* helpers."
+  # `git commit` is exempt: the command text may legitimately mention state-file
+  # paths inside the commit message. Commit phase rules apply elsewhere.
+  if ! printf '%s' "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+    # `>[^&]` excludes fd-merge redirects (2>&1, >&2) which are not destructive.
+    if printf '%s' "$COMMAND" | grep -qE '(>[^&]|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
+      block "Direct state-file edits are blocked. Use vdgg_state_* helpers."
+    fi
   fi
 fi
 

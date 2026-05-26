@@ -122,6 +122,13 @@ if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "
             exit 0
         fi
         # VibesDeGoGo hook/state logic.
+        # Exclude sentinel file itself to avoid a self-referential modification loop
+        # when the sentinel is written via Edit/Write (e.g. in environments without
+        # the `simplify` Skill tool, where Bash heredoc is the fallback).
+        if [[ "$EDITED_FILE_PATH" == *"/.vdgg-simplify-sentinel-"* ]]; then
+            exit 0
+        fi
+        # VibesDeGoGo hook/state logic.
         TASKS_DIR_BASENAME="tasks/vdgg/${VDGG_ID}"
         if [[ "$EDITED_FILE_PATH" == *"$TASKS_DIR_BASENAME"* ]]; then
             exit 0

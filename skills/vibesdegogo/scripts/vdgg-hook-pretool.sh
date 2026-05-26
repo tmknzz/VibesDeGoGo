@@ -107,7 +107,13 @@ if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
 fi
 if [ "$TOOL_NAME" = "Bash" ]; then
     # VibesDeGoGo hook/state logic.
-    if echo "$COMMAND" | grep -qE '(\.claude/\.vdgg-state-|\.claude/\.vdgg-active)'; then
+    # `git commit` is exempt: the command text may legitimately mention state-file
+    # paths inside the commit message, and git commit does not write to those
+    # tracked files directly. Commit phase rules and the implementing/testing
+    # commit-blocking pattern still apply elsewhere.
+    if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+        :
+    elif echo "$COMMAND" | grep -qE '(\.claude/\.vdgg-state-|\.claude/\.vdgg-active)'; then
         # VibesDeGoGo hook/state logic.
         # `>[^&]` excludes fd-merge redirects (2>&1, >&2) which are not destructive.
         if echo "$COMMAND" | grep -qE '(>[^&]|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then

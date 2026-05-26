@@ -1,18 +1,18 @@
 #!/bin/bash
-# VibesDeGoGo hook/state logic.
+# vdgg-state.sh - VibesDeGoGo! state file helpers for Claude Code.
 #
 # state file: .claude/.vdgg-state-{id}
-# VibesDeGoGo hook/state logic.
+# active file: .claude/.vdgg-active  (stores the currently active id)
 # tasks dir:   tasks/vdgg/{id}/
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Capture the working directory at source time; later `cd` calls should not
+# silently move the state root.
 : "${VDGG_CWD:=$(pwd)}"
 
 VDGG_STATE_DIR="${VDGG_STATE_DIR:-${VDGG_CWD}/.claude}"
 VDGG_TASKS_DIR="${VDGG_TASKS_DIR:-${VDGG_CWD}/tasks/vdgg}"
 
-# VibesDeGoGo hook/state logic.
+# --- Internal helpers ---
 
 _vdgg_generate_id() {
     local timestamp
@@ -32,8 +32,8 @@ _vdgg_state_file_for_id() {
     echo "${VDGG_STATE_DIR}/.vdgg-state-${id}"
 }
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Remove matched state sidecar files without requiring a shell glob to expand.
+# This keeps cleanup quiet when no matching files exist.
 _vdgg_rm_glob() {
     [ -d "$1" ] || return 0
     find "$1" -maxdepth 1 -name "$2" -type f -exec rm -f {} + 2>/dev/null || true
@@ -59,8 +59,8 @@ _vdgg_get_state_file() {
     _vdgg_state_file_for_id "$id"
 }
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Step continuity check.
+# Allowed: +0, +1, 8->5 for selecting the next task, and 7->6 for retry loops.
 _vdgg_check_step_transition() {
     local current="$1"
     local next="$2"
@@ -73,11 +73,11 @@ _vdgg_check_step_transition() {
     if [ "$next" -eq "$current" ] || [ "$next" -eq $((current + 1)) ]; then
         return 0
     fi
-    # VibesDeGoGo hook/state logic.
+    # progress(8) -> task-selected(5): continue with remaining tasks.
     if [ "$current" -eq 8 ] && [ "$next" -eq 5 ]; then
         return 0
     fi
-    # VibesDeGoGo hook/state logic.
+    # testing(7) -> implementing(6): retry through reflection.
     if [ "$current" -eq 7 ] && [ "$next" -eq 6 ]; then
         return 0
     fi
@@ -86,7 +86,7 @@ _vdgg_check_step_transition() {
     return 1
 }
 
-# VibesDeGoGo hook/state logic.
+# --- Public functions ---
 
 vdgg_state_init() {
     local id
@@ -97,7 +97,7 @@ vdgg_state_init() {
     state_file=$(_vdgg_state_file_for_id "$id")
     local tasks_dir="${VDGG_TASKS_DIR}/${id}"
 
-    # VibesDeGoGo hook/state logic.
+    # Warn when a previous VibesDeGoGo! session is still active.
     if [ -f "$active_file" ]; then
         local old_id
         old_id=$(cat "$active_file")
@@ -107,15 +107,15 @@ vdgg_state_init() {
     mkdir -p "$(dirname "$state_file")"
     mkdir -p "$tasks_dir"
 
-    # VibesDeGoGo hook/state logic.
+    # Clear stale sidecars from previous sessions before creating the new state.
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-step-block-*'
     rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
 
-    # VibesDeGoGo hook/state logic.
+    # Store the active id before writing the state file.
     echo "$id" > "$active_file"
 
-    # VibesDeGoGo hook/state logic.
+    # Initialize the state file in KEY=VALUE format for hook parsing.
     cat > "$state_file" << EOF
 step=1
 phase=declare
@@ -185,7 +185,7 @@ vdgg_state_write() {
     local id
     id=$(_vdgg_get_active_id)
 
-    # VibesDeGoGo hook/state logic.
+    # Preserve current_task when callers omit it.
     if [ -z "$new_current_task" ] && [ -f "$state_file" ]; then
         new_current_task=$(grep "^current_task=" "$state_file" | cut -d= -f2-)
     fi
@@ -216,7 +216,7 @@ vdgg_state_advance() {
     current_step=$(grep "^step=" "$state_file" | cut -d= -f2)
     current_step="${current_step:-0}"
 
-    # VibesDeGoGo hook/state logic.
+    # Guard 1: every state transition must obey the allowed step graph.
     if ! _vdgg_check_step_transition "$current_step" "$next_step"; then
         return 1
     fi
@@ -228,9 +228,7 @@ vdgg_state_advance() {
     local current_task
     current_task=$(grep "^current_task=" "$state_file" | cut -d= -f2-)
 
-    # VibesDeGoGo hook/state logic.
-    # VibesDeGoGo hook/state logic.
-    # VibesDeGoGo hook/state logic.
+    # When Step 8 continues to Step 5, start the next task with a fresh loop.
     if [ "$current_step" -eq 8 ] && [ "$next_step" -eq 5 ]; then
         current_loop=0
     fi
@@ -253,7 +251,7 @@ vdgg_state_loop() {
     current_step=$(grep "^step=" "$state_file" | cut -d= -f2)
     current_step="${current_step:-0}"
 
-    # VibesDeGoGo hook/state logic.
+    # Guard 1: every retry loop must still obey the allowed step graph.
     if ! _vdgg_check_step_transition "$current_step" "$loop_step"; then
         return 1
     fi
@@ -266,8 +264,7 @@ vdgg_state_loop() {
     local current_task
     current_task=$(grep "^current_task=" "$state_file" | cut -d= -f2-)
 
-    # VibesDeGoGo hook/state logic.
-    # VibesDeGoGo hook/state logic.
+    # Drop the previous loop's simplify sentinel so review cannot leak forward.
     local vdgg_id
     vdgg_id=$(_vdgg_get_active_id)
     if [ -n "$vdgg_id" ]; then
@@ -295,7 +292,7 @@ vdgg_state_clear() {
         rm "$active_file"
     fi
 
-    # VibesDeGoGo hook/state logic.
+    # Remove sidecars that should never survive into the next session.
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-step-block-*'
     rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
     _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
@@ -303,7 +300,7 @@ vdgg_state_clear() {
     echo "vdgg-state: cleared (id=$id)" >&2
 }
 
-# VibesDeGoGo hook/state logic.
+# --- Utilities ---
 
 vdgg_get_tasks_dir() {
     local id

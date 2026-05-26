@@ -109,7 +109,8 @@ if [ "$TOOL_NAME" = "Bash" ]; then
     # VibesDeGoGo hook/state logic.
     if echo "$COMMAND" | grep -qE '(\.claude/\.vdgg-state-|\.claude/\.vdgg-active)'; then
         # VibesDeGoGo hook/state logic.
-        if echo "$COMMAND" | grep -qE '(>|>>|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
+        # `>[^&]` excludes fd-merge redirects (2>&1, >&2) which are not destructive.
+        if echo "$COMMAND" | grep -qE '(>[^&]|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
             echo "VibesDeGoGo! [${VDGG_ID}]: Direct state-file edits are blocked. Use vdgg_state_* helpers." >&2
             exit 2
         fi

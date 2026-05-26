@@ -181,11 +181,17 @@ if [ "$EXIT_CODE" -ne 0 ]; then
 fi
 
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$HOOK_EVENT_NAME" = "PostToolUseFailure" ]; then
-    ERROR_DETECTED=1
-    if [ -n "$HOOK_ERROR" ]; then
-        ERROR_REASON="$HOOK_ERROR"
+    # VibesDeGoGo hook/state logic.
+    # Search commands' no-match (exit=1) is benign; same exception as the EXIT_CODE branch above.
+    if [ "$IS_SEARCH" -eq 1 ] && [ "$EXIT_CODE" -lt 2 ]; then
+        :
     else
-        ERROR_REASON="PostToolUseFailure"
+        ERROR_DETECTED=1
+        if [ -n "$HOOK_ERROR" ]; then
+            ERROR_REASON="$HOOK_ERROR"
+        else
+            ERROR_REASON="PostToolUseFailure"
+        fi
     fi
 fi
 

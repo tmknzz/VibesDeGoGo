@@ -1,13 +1,12 @@
 #!/bin/bash
-# VibesDeGoGo hook/state logic.
+# vdgg-hook-pretool.sh - PreToolUse hook for VibesDeGoGo! step enforcement.
 
 set -euo pipefail
 
 INPUT=$(cat)
 
 if ! command -v jq &> /dev/null; then
-    # VibesDeGoGo hook/state logic.
-    # VibesDeGoGo hook/state logic.
+    # Best-effort fallback parser so a missing jq can still allow `brew install jq`.
     FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
     FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
     if command -v brew &> /dev/null; then
@@ -25,13 +24,13 @@ fi
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
-# VibesDeGoGo hook/state logic.
+# CWD is required to locate the repository-local state files.
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 if [ -z "$CWD" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Active file stores the current VibesDeGoGo! id.
 ACTIVE_FILE="$CWD/.claude/.vdgg-active"
 if [ ! -f "$ACTIVE_FILE" ]; then
     exit 0
@@ -42,7 +41,7 @@ if [ -z "$VDGG_ID" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Load the state file for the active id.
 STATE_FILE="$CWD/.claude/.vdgg-state-${VDGG_ID}"
 if [ ! -f "$STATE_FILE" ]; then
     exit 0
@@ -57,10 +56,10 @@ if [ -z "$PHASE" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Task directory for the active id, used for phase-specific write allowances.
 TASKS_DIR="$CWD/tasks/vdgg/${VDGG_ID}"
 
-# VibesDeGoGo hook/state logic.
+# Extract only the fields needed for the current tool type.
 
 case "$TOOL_NAME" in
     Edit|Write)
@@ -70,15 +69,16 @@ case "$TOOL_NAME" in
         COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
         ;;
     Agent)
-        # VibesDeGoGo hook/state logic.
+        # Agent calls are phase-gated below.
         ;;
     *)
-        # VibesDeGoGo hook/state logic.
+        # Read, Glob, Grep, and other non-mutating tools are always allowed.
         exit 0
         ;;
 esac
 
-# VibesDeGoGo hook/state logic.
+# Error acknowledgement gate: after a failed Bash command, require the next
+# assistant turn to acknowledge it before another tool runs.
 ERROR_FLAG="$CWD/.claude/.vdgg-error-pending"
 if [ -f "$ERROR_FLAG" ]; then
     TRANSCRIPT_PATH_E=$(echo "$INPUT" | jq -r '.transcript_path // empty')
@@ -96,8 +96,7 @@ if [ -f "$ERROR_FLAG" ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Guard 4: block direct state-file edits in all phases.
 if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
     if [[ "$FILE_PATH" == *"/.claude/.vdgg-state-"* ]] || [[ "$FILE_PATH" == *"/.claude/.vdgg-active" ]] \
         || [[ "$FILE_PATH" == *".claude/.vdgg-state-"* ]] || [[ "$FILE_PATH" == *".claude/.vdgg-active" ]]; then
@@ -106,7 +105,7 @@ if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
     fi
 fi
 if [ "$TOOL_NAME" = "Bash" ]; then
-    # VibesDeGoGo hook/state logic.
+    # Bash can also mutate state files through redirection or file operations.
     # `git commit` is exempt: the command text may legitimately mention state-file
     # paths inside the commit message, and git commit does not write to those
     # tracked files directly. Commit phase rules and the implementing/testing
@@ -114,7 +113,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
     if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
         :
     elif echo "$COMMAND" | grep -qE '(\.claude/\.vdgg-state-|\.claude/\.vdgg-active)'; then
-        # VibesDeGoGo hook/state logic.
+        # Reads are allowed; writes must go through vdgg_state_* helpers.
         # `>[^&]` excludes fd-merge redirects (2>&1, >&2) which are not destructive.
         if echo "$COMMAND" | grep -qE '(>[^&]|tee[[:space:]]|sed[[:space:]]+-i|mv[[:space:]]|cp[[:space:]]|rm[[:space:]])'; then
             echo "VibesDeGoGo! [${VDGG_ID}]: Direct state-file edits are blocked. Use vdgg_state_* helpers." >&2
@@ -123,26 +122,21 @@ if [ "$TOOL_NAME" = "Bash" ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Guard 2: validate Step declarations in Bash state-transition commands.
 #
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# The hook checks tool_input.command instead of transcript text because the
+# current assistant message may not be in the transcript at PreToolUse time.
+# This prevents a valid first attempt from being falsely rejected, and prevents
+# a retry from bypassing the declaration check.
 #
-# VibesDeGoGo hook/state logic.
+# Exception: Step 2 accepts the declaration banner emitted during initialization.
 #
-# VibesDeGoGo hook/state logic.
+# Example:
 #   # [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
 #   source $HOME/.claude/skills/vibesdegogo/scripts/vdgg-state.sh && vdgg_state_advance 3 investigating
 #
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Human-readable assistant text may still include the declaration, but the
+# enforceable contract is the command text.
 if [ "$TOOL_NAME" = "Bash" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+'; then
     TRANSITION_COUNT=$(printf '%s\n' "$COMMAND" | grep -oE 'vdgg_state_(advance|loop)[[:space:]]+[0-9]+' | wc -l | tr -d ' ')
     if [ "${TRANSITION_COUNT:-0}" -gt 1 ]; then
@@ -164,9 +158,8 @@ if [ "$TOOL_NAME" = "Bash" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(advance|
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Guard 5: tests must run only after the workflow enters testing.
+# The default command pattern can be extended through `.vdgg-target`.
 if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "implementing" ]; then
     TEST_PATTERN_DEFAULT='swift[[:space:]]+test|xcodebuild[[:space:]]+[^|]*[[:space:]]test|pytest|npm[[:space:]]+(run[[:space:]]+)?test|pnpm[[:space:]]+(run[[:space:]]+)?test|yarn[[:space:]]+(run[[:space:]]+)?test|go[[:space:]]+test|cargo[[:space:]]+test|jest|vitest|mocha'
     TEST_PATTERN_EXTRA=""
@@ -183,9 +176,8 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "implementing" ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Loop-count safety: block mutating tools after an obviously runaway retry loop.
+# Read-like tools returned earlier, so only Edit/Write/Bash/Agent reach this.
 if [ "$PHASE" = "implementing" ] || [ "$PHASE" = "testing" ]; then
     if [ "$LOOP_COUNT" -ge 99 ]; then
         echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
@@ -193,16 +185,16 @@ if [ "$PHASE" = "implementing" ] || [ "$PHASE" = "testing" ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
+# Phase-specific guards.
 
 case "$PHASE" in
     declare|requirements)
-        # VibesDeGoGo hook/state logic.
+        # Agent work is blocked until requirements are fixed.
         if [ "$TOOL_NAME" = "Agent" ]; then
             echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
             exit 2
         fi
-        # VibesDeGoGo hook/state logic.
+        # During declaration/requirements, only task files may be written.
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
             if [ -n "$FILE_PATH" ]; then
                 if [[ "$FILE_PATH" == */${TASKS_DIR}/* ]] || [[ "$FILE_PATH" == ${TASKS_DIR}/* ]]; then
@@ -212,8 +204,7 @@ case "$PHASE" in
                 exit 2
             fi
         fi
-        # VibesDeGoGo hook/state logic.
-        # VibesDeGoGo hook/state logic.
+        # requirements.md is mandatory before investigation starts.
         if [ "$PHASE" = "requirements" ] && [ "$TOOL_NAME" = "Bash" ]; then
             if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+3[[:space:]]+investigating([[:space:]]|$)'; then
                 REQ_FILE="${TASKS_DIR}/requirements.md"
@@ -226,8 +217,7 @@ case "$PHASE" in
         ;;
 
     investigating|planning)
-        # VibesDeGoGo hook/state logic.
-        # VibesDeGoGo hook/state logic.
+        # Investigation and planning may only update task documentation.
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
             if [ -n "$FILE_PATH" ]; then
                 if [[ "$FILE_PATH" == */${TASKS_DIR}/* ]] || [[ "$FILE_PATH" == ${TASKS_DIR}/* ]]; then
@@ -240,7 +230,7 @@ case "$PHASE" in
         ;;
 
     task-selected)
-        # VibesDeGoGo hook/state logic.
+        # Once a task is selected, advance to implementing before editing files.
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
             echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
             exit 2
@@ -248,18 +238,18 @@ case "$PHASE" in
         ;;
 
     implementing|testing)
-        # VibesDeGoGo hook/state logic.
+        # Commit only after verification and progress are complete.
         if [ "$TOOL_NAME" = "Bash" ]; then
             if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
                 exit 2
             fi
-            # VibesDeGoGo hook/state logic.
+            # A failed test must go through reflection before more implementation.
             if [ "$PHASE" = "testing" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+[0-9]+[[:space:]]+implementing'; then
                 echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                 exit 2
             fi
-            # VibesDeGoGo hook/state logic.
+            # verified requires a simplify sentinel, and simplify must not have edited code.
             if [ "$PHASE" = "testing" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
                 SENTINEL_FILE="$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}"
                 if [ ! -f "$SENTINEL_FILE" ]; then
@@ -272,14 +262,14 @@ case "$PHASE" in
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                     exit 2
                 fi
-                # VibesDeGoGo hook/state logic.
+                # Consume the sentinel so it cannot be reused by a later cycle.
                 rm -f "$SENTINEL_FILE"
             fi
         fi
         ;;
 
     reflection)
-        # VibesDeGoGo hook/state logic.
+        # Reflection can only update retry investigation notes and progress.
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
             if [ -n "$FILE_PATH" ]; then
                 if [[ "$FILE_PATH" == "${TASKS_DIR}/progress.md" ]] \
@@ -290,10 +280,9 @@ case "$PHASE" in
             echo "VibesDeGoGo! reflection [${VDGG_ID}]: Reflection must update retry investigation and progress before returning to implementation." >&2
             exit 2
         fi
-        # VibesDeGoGo hook/state logic.
-        # VibesDeGoGo hook/state logic.
+        # Reflection may use Bash, but it may not jump directly to verified.
         if [ "$TOOL_NAME" = "Bash" ]; then
-            # VibesDeGoGo hook/state logic.
+            # verified is only reachable from testing after review.
             if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
                 echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                 exit 2
@@ -325,14 +314,14 @@ case "$PHASE" in
         ;;
 
     verified|progress|commit)
-        # VibesDeGoGo hook/state logic.
+        # No code edits after verification; only progress/version metadata may change.
         if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; then
             if { [ "$PHASE" = "progress" ] || [ "$PHASE" = "commit" ]; } && [ -n "$FILE_PATH" ]; then
-                # VibesDeGoGo hook/state logic.
+                # progress.md remains editable for validation and commit notes.
                 if [[ "$FILE_PATH" == "${TASKS_DIR}/progress.md" ]]; then
                     exit 0
                 fi
-                # VibesDeGoGo hook/state logic.
+                # Version files explicitly configured in `.vdgg-target` are allowed.
                 TARGET_FILE="$CWD/.vdgg-target"
                 if [ -f "$TARGET_FILE" ]; then
                     ALLOWED_PATHS=$(grep -E '^VERSION_FILE_[0-9]+_PATH=' "$TARGET_FILE" \
@@ -352,9 +341,9 @@ case "$PHASE" in
             echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
             exit 2
         fi
-        # VibesDeGoGo hook/state logic.
+        # branch-pr workflow forbids committing or pushing directly on the base branch.
         if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "commit" ]; then
-            # VibesDeGoGo hook/state logic.
+            # Defaults match SKILL.md unless `.vdgg-target` overrides them.
             WF=branch-pr; BB=""
             if [ -f "$CWD/.vdgg-target" ]; then
                 WF=$( { grep -E '^WORKFLOW=' "$CWD/.vdgg-target" 2>/dev/null || true; } | tail -1 | sed -E 's/^[^=]*=//; s/^"//; s/"$//')
@@ -368,9 +357,7 @@ case "$PHASE" in
                     BB=${BB:-main}
                 fi
                 CURBR=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-                # VibesDeGoGo hook/state logic.
-                # VibesDeGoGo hook/state logic.
-                # VibesDeGoGo hook/state logic.
+                # Escape base branch for grep -E before matching push commands.
                 BB_RE=$(printf '%s' "$BB" | sed 's/[^[:alnum:]]/\\&/g')
                 if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([[:space:]]|$)'; then
                     if [ "$CURBR" = "$BB" ]; then

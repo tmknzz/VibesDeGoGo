@@ -271,6 +271,8 @@ Outcomes:
 - `modified=0`: verified transition is allowed.
 - `modified=1`: verified transition is blocked; go through reflection and re-test.
 
+For environments that cannot use the `simplify` skill, the state helper also exposes `vdgg_state_mark_reviewed` as an explicit review marker. It is an auxiliary compatibility hook, not a replacement for the Claude Code simplify gate when that gate is available.
+
 After successful verification and simplify review:
 
 ```bash

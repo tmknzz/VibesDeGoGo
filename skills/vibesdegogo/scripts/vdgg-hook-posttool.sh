@@ -1,14 +1,13 @@
 #!/bin/bash
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# vdgg-hook-posttool.sh - PostToolUse hook for error and simplify tracking.
+# It records failed Bash commands so the next PreToolUse can require acknowledgement.
 
 set -euo pipefail
 
 INPUT=$(cat)
 
 if ! command -v jq &> /dev/null; then
-    # VibesDeGoGo hook/state logic.
-    # VibesDeGoGo hook/state logic.
+    # Best-effort fallback parser so a missing jq can still allow `brew install jq`.
     FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
     FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
     if command -v brew &> /dev/null; then
@@ -27,13 +26,13 @@ fi
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 HOOK_EVENT_NAME=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
 
-# VibesDeGoGo hook/state logic.
+# CWD is required to locate the repository-local state files.
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 if [ -z "$CWD" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Active file stores the current VibesDeGoGo! id.
 ACTIVE_FILE="$CWD/.claude/.vdgg-active"
 if [ ! -f "$ACTIVE_FILE" ]; then
     exit 0
@@ -44,7 +43,7 @@ if [ -z "$VDGG_ID" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Load the state file for the active id.
 STATE_FILE="$CWD/.claude/.vdgg-state-${VDGG_ID}"
 if [ ! -f "$STATE_FILE" ]; then
     exit 0
@@ -59,10 +58,9 @@ if [ -z "$PHASE" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Phase-specific tool filter.
+# Outside testing, only Bash results can create error flags.
+# In testing, Skill/Edit/Write are also needed for simplify sentinel tracking.
 if [ "$PHASE" != "testing" ]; then
     if [ "$TOOL_NAME" != "Bash" ]; then
         exit 0
@@ -83,15 +81,10 @@ STDERR=$(echo "$INPUT" | jq -r '.tool_response.stderr // empty')
 STDOUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // empty')
 HOOK_ERROR=$(echo "$INPUT" | jq -r '.error // empty')
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# Skill/Edit/Write events are handled only by the testing-specific blocks below.
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# simplify skill invocation creates a sentinel for the current test loop.
+# The sentinel later records whether simplify changed implementation files.
 if [ "$PHASE" = "testing" ] && [ "$TOOL_NAME" = "Skill" ]; then
     SKILL_NAME=$(echo "$INPUT" | jq -r '.tool_input.skill // empty')
     if [ "$SKILL_NAME" = "simplify" ]; then
@@ -109,31 +102,28 @@ EOF
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
+# After simplify starts, any Edit/Write to implementation files marks the
+# sentinel as modified so verified is blocked until reflection/re-test.
 if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; }; then
     SENTINEL_FILE="$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}"
     if [ -f "$SENTINEL_FILE" ]; then
         EDITED_FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-        # VibesDeGoGo hook/state logic.
+        # State files are internal workflow files, not implementation changes.
         if [[ "$EDITED_FILE_PATH" == *"/.vdgg-state-"* ]] || [[ "$EDITED_FILE_PATH" == *"/.vdgg-active"* ]]; then
             exit 0
         fi
-        # VibesDeGoGo hook/state logic.
         # Exclude sentinel file itself to avoid a self-referential modification loop
         # when the sentinel is written via Edit/Write (e.g. in environments without
         # the `simplify` Skill tool, where Bash heredoc is the fallback).
         if [[ "$EDITED_FILE_PATH" == *"/.vdgg-simplify-sentinel-"* ]]; then
             exit 0
         fi
-        # VibesDeGoGo hook/state logic.
+        # Task notes are workflow records, not implementation changes.
         TASKS_DIR_BASENAME="tasks/vdgg/${VDGG_ID}"
         if [[ "$EDITED_FILE_PATH" == *"$TASKS_DIR_BASENAME"* ]]; then
             exit 0
         fi
-        # VibesDeGoGo hook/state logic.
+        # Append the edited file once.
         CURRENT_FILES=$(grep '^modified_files=' "$SENTINEL_FILE" | head -1 | sed 's/^modified_files=//')
         if [ -n "$EDITED_FILE_PATH" ] && [[ ",$CURRENT_FILES," != *",$EDITED_FILE_PATH,"* ]]; then
             if [ -z "$CURRENT_FILES" ]; then
@@ -144,7 +134,7 @@ if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "
         else
             NEW_FILES="$CURRENT_FILES"
         fi
-        # VibesDeGoGo hook/state logic.
+        # Rewrite the sentinel atomically through a temp file.
         TMP=$(mktemp)
         grep -v '^modified=' "$SENTINEL_FILE" | grep -v '^modified_files=' > "$TMP" || true
         cat >> "$TMP" <<EOF
@@ -160,27 +150,26 @@ if [ "$TOOL_NAME" != "Bash" ]; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Search commands often use exit 1 for "no matches"; avoid treating that as failure.
 SEARCH_CMDS_PATTERN='(^|[[:space:];&|(])(grep|rg|ag|ack|find|awk|sed|fgrep|egrep|jq|test|\[)([[:space:]]|$)'
 IS_SEARCH=0
 if echo "$COMMAND" | grep -qE "$SEARCH_CMDS_PATTERN"; then
     IS_SEARCH=1
 fi
 
-# VibesDeGoGo hook/state logic.
-# VibesDeGoGo hook/state logic.
-if echo "$COMMAND" | grep -qE 'fo[a-z]_state_(init|write|advance|loop|clear|read)'; then
+# Internal state-helper commands are workflow operations, not user command failures.
+if echo "$COMMAND" | grep -qE 'vdgg_state_(init|write|advance|loop|clear|read)'; then
     exit 0
 fi
 
-# VibesDeGoGo hook/state logic.
+# Error detection combines exit status, hook failure events, and textual error signals.
 ERROR_DETECTED=0
 ERROR_REASON=""
 
 if [ "$EXIT_CODE" -ne 0 ]; then
-    # VibesDeGoGo hook/state logic.
+    # For search commands, exit 1 means "not found"; exit 2+ is a real error.
     if [ "$IS_SEARCH" -eq 1 ] && [ "$EXIT_CODE" -lt 2 ]; then
-        : # VibesDeGoGo hook/state logic.
+        : # ignore no-match search results
     else
         ERROR_DETECTED=1
         ERROR_REASON="exit code=$EXIT_CODE"
@@ -202,7 +191,7 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$HOOK_EVENT_NAME" = "PostToolUseFailure" ];
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
+# stderr error/fail signals count only for non-search commands.
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     if echo "$STDERR" | grep -qE '(^|[^a-zA-Z])(error|Error|ERROR|fail|Fail|FAIL|Exception|Traceback)([^a-zA-Z]|$)'; then
         ERROR_DETECTED=1
@@ -210,7 +199,7 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
+# stdout is noisier, so only line-starting `error:` / `fail:` style output counts.
 if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     if echo "$STDOUT" | grep -qE '^[[:space:]]*(error|Error|ERROR|fail|Fail|FAIL):[[:space:]]'; then
         ERROR_DETECTED=1
@@ -218,7 +207,7 @@ if [ "$ERROR_DETECTED" -eq 0 ] && [ "$IS_SEARCH" -eq 0 ]; then
     fi
 fi
 
-# VibesDeGoGo hook/state logic.
+# Store the pending error for the next PreToolUse acknowledgement gate.
 if [ "$ERROR_DETECTED" -eq 1 ]; then
     FLAG_FILE="$CWD/.claude/.vdgg-error-pending"
     {

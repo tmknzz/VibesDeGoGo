@@ -1,4 +1,5 @@
 .DS_Store
 .claude/.vdgg-*
 tasks/vdgg/
-
+.claude/.fop-*
+tasks/fop/

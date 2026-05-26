@@ -162,7 +162,7 @@ fi
 
 # VibesDeGoGo hook/state logic.
 # VibesDeGoGo hook/state logic.
-if echo "$COMMAND" | grep -qE 'fo[a-z]_state_(init|write|advance|loop|clear|read)'; then
+if echo "$COMMAND" | grep -qE 'vdgg_state_(init|write|advance|loop|clear|read)'; then
     exit 0
 fi
 

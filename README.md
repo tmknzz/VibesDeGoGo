@@ -1,3 +1,5 @@
+**English** | [日本語](README.ja.md)
+
 # VibesDeGoGo!
 
 VibesDeGoGo! is a state-and-hook workflow that keeps AI coding agents moving until the work is actually done, while stopping only before constraint violations.

@@ -1,3 +1,5 @@
+**English** | [日本語](CONTRIBUTING.ja.md)
+
 # Contributing
 
 Thanks for improving VibesDeGoGo!. This project is intentionally small: shell

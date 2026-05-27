@@ -5,22 +5,26 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-if ! command -v jq &> /dev/null; then
-    # Best-effort fallback parser so a missing jq can still allow `brew install jq`.
-    FALLBACK_TOOL=$(printf '%s' "$INPUT" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
-    FALLBACK_CMD=$(printf '%s' "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
-    if command -v brew &> /dev/null; then
-        ( brew install jq > /tmp/vdgg-jq-install.log 2>&1 & )
-        echo "vdgg hook: jq is required. Install jq and retry." >&2
-    else
-        echo "vdgg-hook-pretool: jq required but brew not found. Install jq manually." >&2
-    fi
-    if [ "$FALLBACK_TOOL" = "Bash" ] && printf '%s' "$FALLBACK_CMD" | grep -qE 'brew[[:space:]]+(install|reinstall)([[:space:]]|[^|;&])*[[:space:]]jq([[:space:]]|$)'; then
+if ! command -v jq >/dev/null 2>&1; then
+    # Allow the current Bash command through if it is itself an attempt to install jq,
+    # so the user can run `brew install jq` / `apt-get install jq` etc. without unblocking.
+    if printf '%s' "$INPUT" | grep -qE '"command"[[:space:]]*:[[:space:]]*"[^"]*(brew[[:space:]]+(install|reinstall)|apt(-get)?[[:space:]]+install|apk[[:space:]]+add|dnf[[:space:]]+install|yum[[:space:]]+install|pacman[[:space:]]+-S)[[:space:]]+[^"]*jq'; then
         exit 0
     fi
-    echo "vdgg hook: jq is required. Install jq and retry." >&2
+    {
+        echo "VibesDeGoGo! hook: jq is required for hooks but was not found on PATH."
+        echo "  macOS:               brew install jq"
+        echo "  Debian/Ubuntu/WSL:   sudo apt-get install jq"
+        echo "  Alpine:              apk add jq"
+        echo "  Fedora/RHEL:         sudo dnf install jq"
+    } >&2
     exit 2
 fi
+
+# Portable mtime in epoch seconds. Tries BSD/macOS first, then GNU/Linux, then 0.
+_vdgg_mtime() {
+    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+}
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
@@ -298,9 +302,9 @@ case "$PHASE" in
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                     exit 2
                 fi
-                STATE_MTIME=$(stat -f %m "$STATE_FILE" 2>/dev/null || echo 0)
-                RETRY_INVESTIGATION_MTIME=$(stat -f %m "$RETRY_INVESTIGATION_FILE" 2>/dev/null || echo 0)
-                PROGRESS_MTIME=$(stat -f %m "$PROGRESS_FILE" 2>/dev/null || echo 0)
+                STATE_MTIME=$(_vdgg_mtime "$STATE_FILE")
+                RETRY_INVESTIGATION_MTIME=$(_vdgg_mtime "$RETRY_INVESTIGATION_FILE")
+                PROGRESS_MTIME=$(_vdgg_mtime "$PROGRESS_FILE")
                 if [ "$RETRY_INVESTIGATION_MTIME" -le "$STATE_MTIME" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                     exit 2

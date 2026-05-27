@@ -17,8 +17,10 @@ set -euo pipefail
 
 INPUT=$(cat)
 
-if ! command -v jq &> /dev/null; then
-    exit 0 # jq missing: do not block the agent from stopping.
+if ! command -v jq >/dev/null 2>&1; then
+    # jq missing: do not block the agent from stopping. Pretool/posttool will surface
+    # the install hint when a tool call actually requires hook enforcement.
+    exit 0
 fi
 
 # Prevent recursive Stop hook loops.

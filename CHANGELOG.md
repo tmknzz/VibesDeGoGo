@@ -5,6 +5,39 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Codex edition smoke tests (`tests/test-codex-state.sh`) covering init,
+  advance, loop, mark_reviewed, clear, and the re-init refusal path.
+- README install hints for `jq` on macOS, Debian/Ubuntu/WSL, Alpine, and
+  Fedora/RHEL.
+- `vdgg_state_mark_reviewed` is now listed in `references/state_helpers.md`
+  as an auxiliary review marker for environments without the `simplify` skill.
+
+### Fixed
+
+- Reflection gate now works on Linux. The pretool hook used the BSD-only
+  `stat -f %m` for retry investigation/progress mtime checks, which silently
+  returned 0 on Linux and permanently blocked the Step 6 retry transition. A
+  small `_vdgg_mtime` helper falls back from `stat -f %m` to `stat -c %Y` so
+  the gate is correct on both macOS and Linux/WSL.
+- Claude edition `vdgg_state_init` no longer silently overwrites an active
+  session. It now prints a clear message with the existing id and returns 1,
+  matching the Codex edition behavior.
+- Codex `_vdgg_generate_id` now truncates the random component to 4 hex
+  characters so ids match the documented `YYYYMMDD-HHMM-xxxx` format and stay
+  in parity with the Claude edition.
+
+### Changed
+
+- Hook `jq` missing-dependency UX is unified across Claude and Codex hooks.
+  All hooks print a per-OS install hint and exit 2 (or 0 in the stop hook).
+  The previous behavior that silently kicked off a background `brew install
+  jq` has been removed; users now run the install command themselves and the
+  pretool/posttool hooks let `brew install jq` / `apt-get install jq` /
+  `apk add jq` / `dnf install jq` / `pacman -S jq` commands through while jq
+  is still missing.
+
 ## [0.2.0] - 2026-05-26
 
 ### Added

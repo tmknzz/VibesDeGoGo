@@ -103,11 +103,13 @@ vdgg_state_init() {
     state_file=$(_vdgg_state_file_for_id "$id")
     local tasks_dir="${VDGG_TASKS_DIR}/${id}"
 
-    # Warn when a previous VibesDeGoGo! session is still active.
+    # Refuse to start if a previous VibesDeGoGo! session is still active so its
+    # state is not silently overwritten. Matches Codex edition behavior.
     if [ -f "$active_file" ]; then
         local old_id
         old_id=$(cat "$active_file")
-        echo "vdgg-state: invalid or blocked state transition" >&2
+        echo "vdgg-state: active VibesDeGoGo! session already exists (id=${old_id})" >&2
+        return 1
     fi
 
     mkdir -p "$(dirname "$state_file")"

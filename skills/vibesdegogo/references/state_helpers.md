@@ -33,10 +33,19 @@ vdgg_state_read
 vdgg_state_write <step> <phase> <loop_count> [current_task]
 vdgg_state_advance <step> <phase>
 vdgg_state_loop <step> <phase>
+vdgg_state_mark_reviewed
 vdgg_state_clear
 vdgg_get_tasks_dir
 vdgg_get_id
 ```
+
+`vdgg_state_mark_reviewed` is an auxiliary review marker for environments that
+cannot use the Claude Code `simplify` skill. It writes a per-loop review
+sentinel under `.claude/.vdgg-review-sentinel-{id}-{loop}`. The default
+verified-gate in the hooks consumes the `simplify` sentinel, so this helper is
+not required for the standard flow; use it only when an alternative review
+gate or explicit external review is needed. See `SKILL.md` Step 7 for the full
+gate description.
 
 ## Transition Rules
 

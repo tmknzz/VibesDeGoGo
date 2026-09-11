@@ -15,6 +15,7 @@ For plugin installs, set `VDGG_SKILL_DIR` to the skill's base directory announce
 .claude/.vdgg-active
 tasks/vdgg/{id}/
 .claude/.vdgg-state-{id}
+.claude/.vdgg-friction-{id}
 ```
 
 State file format:
@@ -45,6 +46,7 @@ vdgg_task_check_allowlist
 vdgg_task_gate [verification command...]
 vdgg_task_rollback
 vdgg_state_clear
+vdgg_friction_report
 vdgg_get_tasks_dir
 vdgg_get_id
 ```
@@ -83,7 +85,7 @@ Allowed transitions:
 - `8 -> 5` to continue with unfinished tasks,
 - `7 -> 6` for testing/reflection retry.
 
-`vdgg_state_loop` increments `loop_count` and removes the old simplify sentinel for that loop.
+`vdgg_state_loop` increments `loop_count`, removes that loop's simplify and review sentinels, and appends a `loop` event to the friction log.
 
 `8 -> 5` resets `loop_count` to 0 and clears `task_allowlist_file`/`task_base_ref` because a new task starts; `vdgg_task_begin` must run again before the next task's edits. Omitted optional args of `vdgg_state_write` preserve the stored values; a literal `-` clears a task field explicitly.
 
@@ -96,7 +98,38 @@ Allowed transitions:
 .claude/.vdgg-simplify-sentinel-*
 .claude/.vdgg-review-sentinel-*
 .claude/.vdgg-task-*  (allowlists, baselines, gate files)
+.claude/.vdgg-friction-*
 ```
+
+`vdgg_state_clear` prints `vdgg_friction_report` to stdout before it removes anything.
+
+## Friction Log
+
+Path:
+
+```text
+$CWD/.claude/.vdgg-friction-{vdgg_id}
+```
+
+Append-only, one line per event. The leading word is the whole contract with the reader; the fields after it are for Step 6-R and humans:
+
+```text
+deny phase=<phase> loop=<loop_count> tool=<tool name> gate=<line of the refusing exit>
+stop phase=<phase>
+loop phase=<phase>
+```
+
+- `deny`: written by the PreToolUse hook's EXIT trap when the hook exits 2 after the session is armed. Refusals that happen before that point (missing `jq`, the `VDGG_REQUIRED` entry gate) are not logged.
+- `stop`: written by the Stop hook when it refuses a silent stop.
+- `loop`: written by `vdgg_state_loop` when a retry starts. `8 -> 5` resets `loop_count`, so this event, not `loop_count`, is the session-wide retry count.
+
+`vdgg_friction_report` prints `denies=N`, `stops=M`, and `loops=L`, one per line, and prints zeros when no session is armed or nothing has been logged.
+
+Known limits:
+
+- Exit status 2 stands in for "a gate refused". `grep` and `jq` also exit 2 on their own errors, so a hook defect can be logged as a `deny`, and a gate that answered with a JSON permission decision would not be counted.
+- `gate` is a line number in the hook as it was when the line was written, and means nothing outside that session.
+- Only the Claude Code edition writes this log. The Codex edition's hooks do not.
 
 ## Simplify Sentinel
 

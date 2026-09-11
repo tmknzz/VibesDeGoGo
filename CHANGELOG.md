@@ -9,6 +9,14 @@ grouped by edition. Their histories are merged into this repository.
 
 ## [Unreleased]
 
+### Added
+
+- Session friction log (Claude Code edition). The hooks and `vdgg_state_loop`
+  append a `deny`, `stop`, or `loop` line to `.claude/.vdgg-friction-{id}`
+  when a gate refuses a tool call or a silent stop, or a retry starts. Step 6-R
+  reads it to find a gate that kept firing, and `vdgg_state_clear` prints the
+  counts for the completion report.
+
 ### Removed
 
 - **Breaking:** `vdgg_state_mark_reviewed` is no longer a public helper in either

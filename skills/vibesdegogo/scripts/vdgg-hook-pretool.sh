@@ -171,6 +171,42 @@ LOOP_COUNT="${LOOP_COUNT:-0}"
 TASK_ALLOWLIST_FILE=$(grep "^task_allowlist_file=" "$STATE_FILE" | cut -d= -f2- || true)
 TASK_GATE_FILE="$CWD/.claude/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 
+# Friction log: record that a gate refused this tool call, so Step 6-R can name
+# where a loop kept catching. One EXIT trap covers all 30-odd `exit 2` sites
+# below instead of editing each one.
+#
+# `gate` is the line number of the `exit` that fired: BASH_LINENO[0] inside an
+# EXIT trap resolves to the exiting line, which is what lets one trap identify
+# a gate as precisely as editing every site would. `phase` cannot -- under
+# `implementing` alone it merges four guards (test commands, sidecar writes,
+# out-of-allowlist edits, the runaway-loop cap). Line numbers move whenever
+# this file is edited, so they only mean anything within the session that
+# wrote them; anything durable must quote the gate's rule, not its number.
+#
+# Known limit: exit status 2 is a proxy for "a gate refused this". grep and jq
+# also exit 2 on their own errors, so a defect in this hook can be logged as
+# user friction, and a gate that ever answers with a JSON permissionDecision
+# would stop being counted. Both are miscounts in a log, not failures of the
+# gate itself.
+#
+# Everything above this line runs before VDGG_ID exists (the jq-missing exit,
+# the entry gate), so pre-arm refusals are out of scope structurally: move this
+# block up there and `set -u` fails on VDGG_ID rather than silently widening
+# what counts as friction. FRICTION_FILE must stay global -- the trap fires
+# after this point in a scope where a `local` would be gone, and under `set -u`
+# that dies during expansion, before `2>/dev/null` or `|| true` can apply.
+FRICTION_FILE="$CWD/.claude/.vdgg-friction-${VDGG_ID}"
+_vdgg_friction_on_exit() {
+    [ "${1:-0}" = "2" ] || return 0
+    # Append-only and short: concurrent pretool invocations write under
+    # O_APPEND well below PIPE_BUF, so no write can clobber another.
+    # Failing to log must never change whether the call is refused.
+    printf 'deny phase=%s loop=%s tool=%s gate=%s\n' \
+        "${PHASE:-}" "${LOOP_COUNT:-}" "${TOOL_NAME:-}" "${BASH_LINENO[0]:-}" \
+        2>/dev/null >> "$FRICTION_FILE" || true
+}
+trap '_vdgg_friction_on_exit $?' EXIT
+
 if [ -z "$PHASE" ]; then
     exit 0
 fi

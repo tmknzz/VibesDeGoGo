@@ -77,6 +77,7 @@ Inputs:
 - loop_count: <number>
 - investigation.md: <path>
 - prior investigation-r files: <paths if any>
+- friction log: <last lines of the session friction log, if any>
 
 Write:
 - <tasks_dir>/investigation-r<loop_count>.md

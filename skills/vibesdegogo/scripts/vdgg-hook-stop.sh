@@ -82,5 +82,9 @@ if echo "$CURRENT_TURN_TEXT" | grep -qF "[Intentional Stop]"; then
 fi
 
 # Otherwise block silent stop while the workflow is active.
+# Record it in the session friction log. The reader (vdgg_friction_report)
+# matches on the leading event word alone, so `stop ` is the whole contract.
+FRICTION_FILE="$CWD/.claude/.vdgg-friction-${VDGG_ID}"
+printf 'stop phase=%s\n' "${PHASE:-}" 2>/dev/null >> "$FRICTION_FILE" || true
 echo "VibesDeGoGo! [${VDGG_ID}] step=${STEP} phase=${PHASE}: Active workflow cannot stop silently. If you are waiting on a background subagent, that is a legitimate reason to pause — say so with [Intentional Stop]. Otherwise run the next state action." >&2
 exit 2

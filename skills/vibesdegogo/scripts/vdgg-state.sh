@@ -45,6 +45,12 @@ _vdgg_review_file_for_id() {
     echo "${VDGG_STATE_DIR}/.vdgg-review-sentinel-${id}-${loop}"
 }
 
+# Append-only friction log: one line per gate that fired, written by the hooks.
+_vdgg_friction_file_for_id() {
+    local id="$1"
+    echo "${VDGG_STATE_DIR}/.vdgg-friction-${id}"
+}
+
 # List every hunk in the current working tree changes as a JSON array of
 # {file, hunk_start, hunk_lines}. Sources are combined so untracked files are
 # NOT invisible to review coverage:
@@ -315,6 +321,20 @@ _vdgg_rm_glob() {
 _vdgg_rm_dir_glob() {
     [ -d "$1" ] || return 0
     find "$1" -maxdepth 1 -name "$2" -type d -exec rm -rf {} + 2>/dev/null || true
+}
+
+# Remove every sidecar that must not survive from one session into the next.
+# Both vdgg_state_init (clearing a previous session's leftovers) and
+# vdgg_state_clear (tearing down this one) need the identical list, and a type
+# added to only one of them fails silently: a stale friction log would be
+# counted as this session's, or would outlive a clear.
+_vdgg_rm_session_sidecars() {
+    rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-task-*'
+    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-friction-*'
+    _vdgg_rm_dir_glob "${VDGG_STATE_DIR}" '.vdgg-task-baseline-*'
 }
 
 # Append VibesDeGoGo!'s own sidecar patterns to the project .gitignore if it
@@ -988,11 +1008,7 @@ vdgg_state_init() {
     _vdgg_ensure_gitignore
 
     # Clear stale sidecars from previous sessions before creating the new state.
-    rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-task-*'
-    _vdgg_rm_dir_glob "${VDGG_STATE_DIR}" '.vdgg-task-baseline-*'
+    _vdgg_rm_session_sidecars
 
     # Store the active id before writing the state file.
     echo "$id" > "$active_file"
@@ -1188,6 +1204,13 @@ vdgg_state_loop() {
     if [ -n "$vdgg_id" ]; then
         rm -f "${VDGG_STATE_DIR}/.vdgg-simplify-sentinel-${vdgg_id}-${current_loop}" 2>/dev/null || true
         rm -f "${VDGG_STATE_DIR}/.vdgg-review-sentinel-${vdgg_id}-${current_loop}" 2>/dev/null || true
+        # A retry is friction too, and this is where one actually happens.
+        # Reading loop_count instead would undercount: Step 8 -> Step 5 resets
+        # it to 0 for the next task, so a session that retried in every task
+        # would report whatever the last task happened to end on. Logging the
+        # event keeps all three friction counts on one append-only source.
+        printf 'loop phase=%s\n' "$loop_phase" \
+            2>/dev/null >> "$(_vdgg_friction_file_for_id "$vdgg_id")" || true
     fi
 
     vdgg_state_write "$loop_step" "$loop_phase" "$new_loop" "$current_task"
@@ -1783,8 +1806,15 @@ vdgg_state_clear() {
     local id
     id=$(_vdgg_get_active_id)
 
+    # Emit the friction counts to stdout BEFORE anything is deleted, in the
+    # same KEY=VALUE shape vdgg_friction_report uses, so a caller reads one
+    # grammar whether it asks during the session or takes what clear hands
+    # back. Calling the report after this returns would answer with zeros --
+    # silently, since it reports zeros rather than failing.
     if [ -n "$id" ]; then
         local state_file
+        vdgg_friction_report
+
         state_file=$(_vdgg_state_file_for_id "$id")
         if [ -f "$state_file" ]; then
             rm "$state_file"
@@ -1796,11 +1826,7 @@ vdgg_state_clear() {
     fi
 
     # Remove sidecars that should never survive into the next session.
-    rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-simplify-sentinel-*'
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
-    _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-task-*'
-    _vdgg_rm_dir_glob "${VDGG_STATE_DIR}" '.vdgg-task-baseline-*'
+    _vdgg_rm_session_sidecars
 
     echo "vdgg-state: cleared (id=$id)" >&2
 }
@@ -1819,4 +1845,32 @@ vdgg_get_tasks_dir() {
 
 vdgg_get_id() {
     _vdgg_get_active_id
+}
+
+# Report where this session's gates fired: refused tool calls, refused silent
+# stops, and retry loops. Emits one KEY=VALUE line each, the same shape as
+# vdgg_state_read, so readers use the existing `grep '^key=' | cut -d= -f2`
+# idiom instead of a second parser. Reports zeros rather than failing when no
+# session is armed or nothing has been logged yet.
+#
+# All three counts come from the same append-only log, so they share a scope:
+# the whole session. The log's grammar is one closed set of leading event
+# words -- deny / stop / loop -- and nothing reads past them.
+vdgg_friction_report() {
+    local id friction_file denies stops loops
+    id=$(_vdgg_get_active_id)
+    friction_file=$(_vdgg_friction_file_for_id "$id")
+
+    # A missing file (no id, or no gate fired yet) makes grep print nothing and
+    # exit non-zero; the normalization below turns that into 0, so no existence
+    # check is needed here.
+    denies=$(grep -c '^deny ' "$friction_file" 2>/dev/null || true)
+    stops=$(grep -c '^stop ' "$friction_file" 2>/dev/null || true)
+    loops=$(grep -c '^loop ' "$friction_file" 2>/dev/null || true)
+
+    case "$denies" in ''|*[!0-9]*) denies=0 ;; esac
+    case "$stops" in ''|*[!0-9]*) stops=0 ;; esac
+    case "$loops" in ''|*[!0-9]*) loops=0 ;; esac
+
+    printf 'denies=%s\nstops=%s\nloops=%s\n' "$denies" "$stops" "$loops"
 }

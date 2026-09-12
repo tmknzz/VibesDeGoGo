@@ -41,6 +41,14 @@ count() {
     echo "${n:-0}"
 }
 
+# The source line a deny line's gate points at. bash 5 resets LINENO inside an
+# EXIT trap, so this is the check that fails when the gate is taken from there.
+gate_source() {
+    local gate
+    gate=$(printf '%s' "$1" | sed -n 's/.*gate=\([0-9][0-9]*\)$/\1/p')
+    [ -n "$gate" ] && sed -n "${gate}p" "$PRETOOL"
+}
+
 # --- pretool: one refusal appends one deny line that names its gate ---
 write_state "$TMPDIR_VDGG" implementing 6 0
 run_pretool '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"swift test"}}' >/dev/null
@@ -48,9 +56,7 @@ assert_eq "1" "$(count deny)" "one refusal appends one deny line"
 LINE=$(grep '^deny ' "$LOG" | head -1)
 assert_contains "$LINE" "phase=implementing" "deny line records the phase"
 assert_contains "$LINE" "tool=Bash" "deny line records the tool"
-GATE=$(printf '%s' "$LINE" | sed -n 's/.*gate=\([0-9][0-9]*\)$/\1/p')
-assert_ne "" "$GATE" "deny line records a gate line number"
-assert_contains "$(sed -n "${GATE}p" "$PRETOOL")" "exit 2" "gate points at the exit that refused"
+assert_contains "$(gate_source "$LINE")" "exit 2" "gate points at the exit that refused a test command"
 
 # --- pretool: an allowed call writes nothing ---
 run_pretool '{"tool_name":"Read","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/x"}}' >/dev/null
@@ -90,6 +96,22 @@ write_state "$TMPDIR_VDGG" testing 7 0
 vdgg_state_loop 6 implementing >/dev/null 2>&1
 assert_eq "1" "$(count loop)" "a retry appends one loop line"
 
+# --- a new task marks its start, and reflection shows only that task ---
+git init -q "$TMPDIR_VDGG"
+write_state "$TMPDIR_VDGG" task-selected 5 0
+vdgg_task_begin "T2: second task" README.md >/dev/null 2>&1
+assert_eq "1" "$(count task)" "vdgg_task_begin marks the task boundary"
+write_state "$TMPDIR_VDGG" implementing 6 0
+run_pretool '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/.claude/.vdgg-state-test-id"}}' >/dev/null
+EDIT_LINE=$(grep '^deny .*tool=Edit' "$LOG" | tail -1)
+assert_contains "$(gate_source "$EDIT_LINE")" "exit 2" "gate points at the exit that refused a sidecar edit"
+write_state "$TMPDIR_VDGG" testing 7 0
+SHOWN=$(vdgg_state_advance 6 reflection 2>&1 >/dev/null)
+assert_contains "$SHOWN" "tool=Edit" "entering reflection shows this task's refusal"
+case "$SHOWN" in
+    *"stop phase"*|*"loop phase"*) fail "entering reflection showed friction from before this task" ;;
+esac
+
 # --- loops count the whole session, not the current task ---
 # Step 8 -> 5 resets loop_count for the next task. The reset assert keeps the
 # next one honest: without it, a report that read loop_count would also pass.
@@ -97,7 +119,7 @@ write_state "$TMPDIR_VDGG" progress 8 1
 vdgg_state_advance 5 task-selected >/dev/null 2>&1
 assert_eq "0" "$(grep '^loop_count=' .claude/.vdgg-state-test-id | cut -d= -f2)" "8 to 5 resets loop_count"
 REPORT=$(vdgg_friction_report)
-assert_eq $'denies=1\nstops=1\nloops=1' "$REPORT" "report counts each event; loops survive the 8 to 5 reset"
+assert_eq $'denies=2\nstops=1\nloops=1' "$REPORT" "report counts each event but not task markers; loops survive the 8 to 5 reset"
 
 # --- clear hands back the same counts before it deletes the log ---
 CLEAR_OUT=$(vdgg_state_clear 2>/dev/null)

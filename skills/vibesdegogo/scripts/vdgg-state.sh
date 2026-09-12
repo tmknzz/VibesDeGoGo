@@ -51,6 +51,20 @@ _vdgg_friction_file_for_id() {
     echo "${VDGG_STATE_DIR}/.vdgg-friction-${id}"
 }
 
+# Print the friction lines written since the current task began (after the
+# last `task` line), at most 20, to stderr. Called on entering reflection so
+# the agent sees where gates fired without having to go read the sidecar.
+# Prints nothing when there is nothing to show, and never fails.
+_vdgg_friction_show_current_task() {
+    local friction_file lines
+    friction_file=$(_vdgg_friction_file_for_id "$(_vdgg_get_active_id)")
+    [ -s "$friction_file" ] || return 0
+    lines=$(awk '/^task /{buf = ""; next} {buf = buf $0 "\n"} END{printf "%s", buf}' "$friction_file" 2>/dev/null | tail -n 20)
+    [ -n "$lines" ] || return 0
+    echo "vdgg-state: friction since this task began (most recent last):" >&2
+    printf '%s\n' "$lines" >&2
+}
+
 # List every hunk in the current working tree changes as a JSON array of
 # {file, hunk_start, hunk_lines}. Sources are combined so untracked files are
 # NOT invisible to review coverage:
@@ -1167,7 +1181,10 @@ vdgg_state_advance() {
         return
     fi
 
-    vdgg_state_write "$next_step" "$next_phase" "$current_loop" "$current_task"
+    vdgg_state_write "$next_step" "$next_phase" "$current_loop" "$current_task" || return
+    if [ "$next_phase" = "reflection" ]; then
+        _vdgg_friction_show_current_task
+    fi
 }
 
 vdgg_state_loop() {
@@ -1677,6 +1694,9 @@ vdgg_task_begin() {
         echo "vdgg_task_begin: state write failed; task gate not armed." >&2
         return 1
     fi
+    # Mark the task boundary in the friction log so entering reflection shows
+    # only this task's lines. The report counts deny/stop/loop, never `task`.
+    printf 'task %s\n' "$task_title" 2>/dev/null >> "$(_vdgg_friction_file_for_id "$id")" || true
     echo "vdgg-task: began '${task_title}' with allowlist ${allowlist_file}" >&2
 }
 
@@ -1854,8 +1874,9 @@ vdgg_get_id() {
 # session is armed or nothing has been logged yet.
 #
 # All three counts come from the same append-only log, so they share a scope:
-# the whole session. The log's grammar is one closed set of leading event
-# words -- deny / stop / loop -- and nothing reads past them.
+# the whole session. Every line starts with one word from a closed set --
+# deny / stop / loop / task -- and only the first three are counted; `task`
+# marks where a task began.
 vdgg_friction_report() {
     local id friction_file denies stops loops
     id=$(_vdgg_get_active_id)

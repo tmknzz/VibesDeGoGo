@@ -779,7 +779,11 @@ vdgg_grill_validate_output() {
 
 vdgg_executor_run() {
   local step_key="${1:-}" input_file="${2:-}" output_file="${3:-}"
-  local formation spec command status total idx=0 last_status=1
+  # Sourced into bash or zsh. Array subscripts differ (zsh counts from 1), so
+  # index only via "${specs[@]}" / "${specs[*]:0:1}", never a bare [0]. And
+  # $status is a read-only alias of $? in zsh — `local status` is accepted and
+  # only the assignment fails, so the exit code is held in `rc`.
+  local formation spec command rc total idx=0 last_status=1
   local -a specs=()
   _vdgg_step_key_is_valid "$step_key" || {
     echo "vdgg-formation: invalid step key: $step_key" >&2
@@ -813,15 +817,15 @@ EOF
   # An inline sole-spec is rejected up front: the resolve chain guarantees that
   # 'inline' only appears as position 1 with total=1 (the preflight blocks it in
   # the tail), so this single check covers every configuration.
-  if [ "${specs[0]}" = "inline" ]; then
+  if [ "${specs[*]:0:1}" = "inline" ]; then
     echo "vdgg-formation: $step_key is assigned to inline; no external executor was run" >&2
     return 1
   fi
-  for (( idx=0; idx < total; idx++ )); do
-    spec="${specs[$idx]}"
+  for spec in "${specs[@]}"; do
+    idx=$((idx + 1))
     if ! command=$(_vdgg_seat_command "$spec" "$step_key"); then
       last_status=1
-      echo "vdgg-formation: spec $((idx+1))/$total ($spec) unresolvable; trying next" >&2
+      echo "vdgg-formation: spec $idx/$total ($spec) unresolvable; trying next" >&2
       continue
     fi
     _vdgg_parse_seat_value "$spec" "$step_key" || { last_status=1; continue; }
@@ -836,18 +840,18 @@ EOF
     # the first line. The `if`-wrapper also suppresses errexit for this
     # specific command so a failing spec never trips the caller's set state.
     if env "VDGG_EXECUTOR_FORMATION=$formation" "VDGG_EXECUTOR_AI=$_VDGG_SEAT_NAME" "VDGG_EXECUTOR_MODEL=$_VDGG_SEAT_MODEL" "VDGG_EXECUTOR_EFFORT=$_VDGG_SEAT_EFFORT" "VDGG_EXECUTOR_STEP=$step_key" "VDGG_EXECUTOR_INPUT=$input_file" "VDGG_EXECUTOR_OUTPUT=$output_file" "$command"; then
-      status=0
+      rc=0
     else
-      status=$?
+      rc=$?
     fi
-    if [ "$status" -ne 0 ]; then
-      last_status=$status
-      echo "vdgg-formation: spec $((idx+1))/$total ($spec) failed: exit $status; trying next" >&2
+    if [ "$rc" -ne 0 ]; then
+      last_status=$rc
+      echo "vdgg-formation: spec $idx/$total ($spec) failed: exit $rc; trying next" >&2
       continue
     fi
     if [ -n "$output_file" ] && [ ! -s "$output_file" ]; then
       last_status=1
-      echo "vdgg-formation: spec $((idx+1))/$total ($spec) produced no output; trying next" >&2
+      echo "vdgg-formation: spec $idx/$total ($spec) produced no output; trying next" >&2
       continue
     fi
     if [ "$step_key" = "STEP_0_GRILL_AI" ]; then
@@ -857,7 +861,7 @@ EOF
       vdgg_grill_validate_output "$output_file" || return 1
     fi
     if [ "$total" -gt 1 ]; then
-      echo "vdgg-formation: spec $((idx+1))/$total ($spec) succeeded" >&2
+      echo "vdgg-formation: spec $idx/$total ($spec) succeeded" >&2
     fi
     return 0
   done
@@ -1328,10 +1332,16 @@ vdgg_task_changed_files() {
   # anchored to the task even after vdgg_state_loop increments the loop.
   baseline_status=$(grep '^task_base_ref=' "$(_vdgg_get_state_file)" | cut -d= -f2- || true)
   [ -n "$baseline_status" ] || baseline_status=$(_vdgg_task_baseline_status_for_id "$id" "$loop")
+  [ -f "$baseline_status" ] || baseline_status=/dev/null
   current_status=$(mktemp)
   git -C "$VDGG_CWD" status --porcelain=v1 --untracked-files=all > "$current_status"
-  { [ -f "$baseline_status" ] && cat "$baseline_status"; cat "$current_status"; } \
-    | sort | uniq -u | sed -E 's/^...//; s/^"//; s/"$//; s/.* -> //; /^\.codex\/\.vdgg-/d' \
+  # One-way difference, not a symmetric one: only lines present now and absent
+  # from the baseline are this task's doing. A symmetric difference also
+  # surfaced dirt the task *cleaned* back to HEAD and reported it as a
+  # violation nothing could clear, since vdgg_task_begin refuses to re-arm
+  # outside Step 5.
+  grep -vxF -f "$baseline_status" "$current_status" \
+    | sed -E 's/^...//; s/^"//; s/"$//; s/.* -> //; /^\.codex\/\.vdgg-/d' \
     | grep -v "^tasks/vdgg/${id}/" \
     | sort -u || true
   rm -f "$current_status"

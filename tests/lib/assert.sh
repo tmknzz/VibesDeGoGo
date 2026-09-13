@@ -17,6 +17,9 @@ assert_ne() {
 
 assert_exit_code() {
     local expected="$1" actual="$2" message="$3"
+    # zsh evaluates `[ 0 -eq "" ]` as true, so a helper that aborted mid-way and
+    # returned nothing would otherwise be recorded as a pass.
+    case "$actual" in ''|*[!0-9]*) fail "${message}: non-numeric exit code '${actual}'" ;; esac
     [ "$expected" -eq "$actual" ] || fail "${message}: expected exit ${expected}, got ${actual}"
 }
 

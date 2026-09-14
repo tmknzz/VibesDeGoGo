@@ -160,6 +160,7 @@ Each VibesDeGoGo! session has a unique ID in this format: `YYYYMMDD-HHMM-xxxx`.
 ```text
 .claude/.vdgg-active              current VibesDeGoGo! ID
 .claude/.vdgg-state-{id}          state file for that ID
+.claude/.vdgg-friction-{id}       append-only log of where gates fired
 tasks/vdgg/{id}/requirements.md   fixed Goal / Constraints / Acceptance criteria
 tasks/vdgg/{id}/investigation.md  Step 3 investigation report
 tasks/vdgg/{id}/todo.md           task list
@@ -565,6 +566,8 @@ At the beginning of reflection, start a researcher subagent for root-cause inves
 
 Lightweight branch: when reflection was triggered by review/simplify findings rather than a test failure, skip the researcher subagent — write `investigation-r{loop_count}.md` directly from the review findings (classify each finding, then state the one fix) instead. A test-failure-triggered reflection still requires the researcher subagent as above. Either way, `investigation-r{loop_count}.md` and `progress.md` must still be written; the hook checks apply the same regardless of which path produced them.
 
+Ground the investigation in the friction log, `.claude/.vdgg-friction-{id}` (format in `references/state_helpers.md`). Entering `reflection` prints this task's lines to stderr, so they are already in front of you; the file holds the rest. A `gate` value that repeats in `deny` lines is the rule the loop kept hitting: cite it, and when this reflection is delegated, include those lines in the executor's input. `gate` is a line number valid only in this session, so durable notes such as `lessons.md` name the rule instead. The log is a record, not a score.
+
 The researcher (or, on the lightweight branch, the agent itself) must write:
 
 ```text
@@ -677,7 +680,7 @@ After PR creation or trunk commit/push decision:
 vdgg_state_clear
 ```
 
-Then provide a friendly completion report: what finished, what was verified, what the user needs to do next, build/version numbers if any, short technical details, any residual low findings from the followup sweep (with the reason each was left), and a lessons line (`lessons applied: N / new: M`).
+Then provide a friendly completion report: what finished, what was verified, what the user needs to do next, build/version numbers if any, short technical details, any residual low findings from the followup sweep (with the reason each was left), a lessons line (`lessons applied: N / new: M`), and a friction line (`gates fired: denies N / stops M / loops L`) copied from the `denies=` / `stops=` / `loops=` lines `vdgg_state_clear` just printed (it deletes the log, so a later `vdgg_friction_report` reads zeros), stated as a plain record without judging whether the numbers are high or low.
 
 ## Stop Conditions
 

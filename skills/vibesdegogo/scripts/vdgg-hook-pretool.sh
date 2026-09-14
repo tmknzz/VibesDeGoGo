@@ -187,8 +187,11 @@ TASK_GATE_FILE="$CWD/.claude/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 # trap keeps the last two line numbers and fires once more for the EXIT trap's
 # own command on both versions, so the older of the two is the `exit` line.
 # That holds only while the EXIT trap string stays a single command. DEBUG
-# traps are not inherited by functions, so an `exit` inside a function would
-# report the line that called it; nothing below this point exits that way.
+# traps are not inherited by functions, so an `exit` inside a function reports
+# the line before the call, not the `exit` itself; nothing below this point
+# exits that way. A `set -e` death inside a function mislocates it the same
+# way; the calls below are all assignments or `if !` conditions, where errexit
+# does not propagate.
 #
 # Known limit: exit status 2 is a proxy for "a gate refused this". grep and jq
 # also exit 2 on their own errors, so a defect in this hook can be logged as
@@ -199,8 +202,7 @@ TASK_GATE_FILE="$CWD/.claude/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 # Everything above this line runs before VDGG_ID exists (the jq-missing exit,
 # the entry gate), so pre-arm refusals are out of scope structurally: move this
 # block up there and `set -u` fails on VDGG_ID rather than silently widening
-# what counts as friction. FRICTION_FILE and the line variables must stay
-# global -- the traps fire
+# what counts as friction. FRICTION_FILE must stay global -- the trap fires
 # after this point in a scope where a `local` would be gone, and under `set -u`
 # that dies during expansion, before `2>/dev/null` or `|| true` can apply.
 FRICTION_FILE="$CWD/.claude/.vdgg-friction-${VDGG_ID}"

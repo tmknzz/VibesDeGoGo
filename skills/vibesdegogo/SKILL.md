@@ -566,7 +566,7 @@ At the beginning of reflection, start a researcher subagent for root-cause inves
 
 Lightweight branch: when reflection was triggered by review/simplify findings rather than a test failure, skip the researcher subagent — write `investigation-r{loop_count}.md` directly from the review findings (classify each finding, then state the one fix) instead. A test-failure-triggered reflection still requires the researcher subagent as above. Either way, `investigation-r{loop_count}.md` and `progress.md` must still be written; the hook checks apply the same regardless of which path produced them.
 
-Ground the investigation in the friction log, `.claude/.vdgg-friction-{id}` (format in `references/state_helpers.md`); its last lines are the loop that just failed. A `gate` value that repeats in `deny` lines is the rule the loop kept hitting: cite it, and when this reflection is delegated, include those lines in the executor's input. `gate` is a line number valid only in this session, so durable notes such as `lessons.md` name the rule instead. The log is a record, not a score.
+Ground the investigation in the friction log, `.claude/.vdgg-friction-{id}` (format in `references/state_helpers.md`). Entering `reflection` prints this task's lines to stderr, so they are already in front of you; the file holds the rest. A `gate` value that repeats in `deny` lines is the rule the loop kept hitting: cite it, and when this reflection is delegated, include those lines in the executor's input. `gate` is a line number valid only in this session, so durable notes such as `lessons.md` name the rule instead. The log is a record, not a score.
 
 The researcher (or, on the lightweight branch, the agent itself) must write:
 

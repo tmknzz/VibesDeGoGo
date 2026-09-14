@@ -117,18 +117,23 @@ Append-only, one line per event. The leading word is the whole contract with the
 deny phase=<phase> loop=<loop_count> tool=<tool name> gate=<line of the refusing exit>
 stop phase=<phase>
 loop phase=<phase>
+task <task title>
 ```
 
 - `deny`: written by the PreToolUse hook's EXIT trap when the hook exits 2 after the session is armed. Refusals that happen before that point (missing `jq`, the `VDGG_REQUIRED` entry gate) are not logged.
 - `stop`: written by the Stop hook when it refuses a silent stop.
 - `loop`: written by `vdgg_state_loop` when a retry starts. `8 -> 5` resets `loop_count`, so this event, not `loop_count`, is the session-wide retry count.
+- `task`: written by `vdgg_task_begin`. It marks a boundary rather than an event, and is not counted.
 
-`vdgg_friction_report` prints `denies=N`, `stops=M`, and `loops=L`, one per line, and prints zeros when no session is armed or nothing has been logged.
+Entering `reflection` prints the lines after the last `task` marker (at most 20) to stderr, so Step 6-R sees the gates this task hit without opening the file.
+
+`vdgg_friction_report` prints `denies=N`, `stops=M`, and `loops=L`, one per line, and prints zeros when no session is armed or nothing has been logged. `task` markers are not counted.
 
 Known limits:
 
 - Exit status 2 stands in for "a gate refused". `grep` and `jq` also exit 2 on their own errors, so a hook defect can be logged as a `deny`, and a gate that answered with a JSON permission decision would not be counted.
-- `gate` is a line number in the hook as it was when the line was written, and means nothing outside that session.
+- `gate` is a line number in the hook as it was when the line was written, and means nothing outside that session. It comes from a DEBUG trap, not `BASH_LINENO`: bash 5 resets that to 1 once the EXIT trap starts, while bash 3.2 does not.
+- DEBUG traps are not inherited by functions, so an `exit` inside one — or a `set -e` death inside one — records the line before the call rather than the line that ended the hook. `tests/test-friction-log.sh` asserts statically that no function reachable under the armed trap contains `exit`; the `set -e` case is documented but not yet asserted.
 - Only the Claude Code edition writes this log. The Codex edition's hooks do not.
 
 ## Simplify Sentinel

@@ -318,3 +318,41 @@ STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"c
 assert_exit_code 2 "$STATUS" "Codex Step 3 gate: '## Lessons Applied' followed by another heading with no body between is blocked"
 
 rm -f "$LESSONS_REQ"
+
+# --- Step 3 -> 4 gate: investigation.md exists and has all 7 required headings --
+# Mirrors the Claude Code hook test; the Codex hook uses the same seven-heading
+# canonical contract enforced via an awk block.
+INV="$TMPDIR_VDGG/tasks/vdgg/test-id/investigation.md"
+ADVANCE_INV_CMD='# [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0\nvdgg_state_advance 4 planning'
+
+# Case A: investigation.md missing -> blocked.
+write_state investigating 3
+rm -f "$INV"
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"'"$ADVANCE_INV_CMD"'"}}')
+assert_exit_code 2 "$STATUS" "Codex Step 4 gate: missing investigation.md is blocked"
+
+# Case B: all 7 headings with non-empty bodies -> allowed.
+write_state investigating 3
+printf '%s' "$VDGG_INV_COMMON" > "$INV"
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"'"$ADVANCE_INV_CMD"'"}}')
+assert_exit_code 0 "$STATUS" "Codex Step 4 gate: investigation.md with all 7 headings passes"
+
+# Case C: one required heading missing -> blocked. Uses shared VDGG_INV_MISSING_H5.
+write_state investigating 3
+printf '%s' "$VDGG_INV_MISSING_H5" > "$INV"
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"'"$ADVANCE_INV_CMD"'"}}')
+assert_exit_code 2 "$STATUS" "Codex Step 4 gate: missing heading is blocked"
+
+# Case D: one heading has an empty body (adjacent next heading) -> blocked. Uses shared VDGG_INV_ADJACENT_H3_H4.
+write_state investigating 3
+printf '%s' "$VDGG_INV_ADJACENT_H3_H4" > "$INV"
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"'"$ADVANCE_INV_CMD"'"}}')
+assert_exit_code 2 "$STATUS" "Codex Step 4 gate: empty body (heading 3 followed immediately by heading 4) is blocked"
+
+# Case E: extra '## Lessons applied' section (Codex naming, no number) present -> pass.
+write_state investigating 3
+{ printf '%s' "$VDGG_INV_COMMON"; printf '\n## Lessons applied\nnone applicable\n'; } > "$INV"
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"'"$ADVANCE_INV_CMD"'"}}')
+assert_exit_code 0 "$STATUS" "Codex Step 4 gate: extra '## Lessons applied' section passes"
+
+rm -f "$INV"

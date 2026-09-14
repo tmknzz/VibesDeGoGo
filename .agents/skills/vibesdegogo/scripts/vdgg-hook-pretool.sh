@@ -266,6 +266,31 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "requirements" ]; then
   fi
 fi
 
+if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "investigating" ]; then
+  if printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning'; then
+    [ -f "$TASKS_DIR/investigation.md" ] || block "investigation.md is required before planning."
+    # Seven direct pattern-action blocks mirror the Step 2->3 gate style above.
+    # Adding or renaming a heading requires editing this block and SKILL.md's
+    # Step 3 list together (this Codex edition has no references/subagent_prompts.md;
+    # the Claude edition's copy of that file is a third source pinned by the
+    # cross-edition drift test in tests/).
+    awk '
+      BEGIN { current = 0 }
+      /^## 1\. Related files[[:space:]]*$/                { seen[1]=1; current=1; next }
+      /^## 2\. Existing implementation patterns[[:space:]]*$/ { seen[2]=1; current=2; next }
+      /^## 3\. Impact surface[[:space:]]*$/               { seen[3]=1; current=3; next }
+      /^## 4\. Prior similar implementations[[:space:]]*$/ { seen[4]=1; current=4; next }
+      /^## 5\. Side effects and risks[[:space:]]*$/       { seen[5]=1; current=5; next }
+      /^## 6\. Constraints[[:space:]]*$/                  { seen[6]=1; current=6; next }
+      /^## 7\. Verification strategy[[:space:]]*$/        { seen[7]=1; current=7; next }
+      current > 0 && /^## /               { current = 0 }
+      current > 0 && /[^[:space:]]/       { body[current] = 1 }
+      END { for (i = 1; i <= 7; i++) if (!seen[i] || !body[i]) exit 1 }
+    ' "$TASKS_DIR/investigation.md" \
+      || block "investigation.md must include all seven required Step 3 headings each with a non-empty body (see SKILL.md Step 3)."
+  fi
+fi
+
 if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "implementing" ]; then
   TEST_PATTERN='swift[[:space:]]+test|xcodebuild[[:space:]]+[^|]*[[:space:]]test|pytest|npm[[:space:]]+(run[[:space:]]+)?test|pnpm[[:space:]]+(run[[:space:]]+)?test|yarn[[:space:]]+(run[[:space:]]+)?test|go[[:space:]]+test|cargo[[:space:]]+test|jest|vitest|mocha'
   if [ -f "$CWD/.vdgg-target" ]; then

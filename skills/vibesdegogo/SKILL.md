@@ -353,6 +353,18 @@ The hook blocks Step 3 until `requirements.md` exists **and** contains a `## Les
 
 Investigate existing code related to the requirements and write `tasks/vdgg/{id}/investigation.md`.
 
+`investigation.md` MUST use exactly these seven level-2 headings, each with a non-empty body — the hook that opens Step 4 checks every heading and every body:
+
+1. `## 1. Related files`
+2. `## 2. Existing implementation patterns`
+3. `## 3. Impact surface`
+4. `## 4. Prior similar implementations`
+5. `## 5. Side effects and risks`
+6. `## 6. Constraints`
+7. `## 7. Verification strategy`
+
+An eighth section `## 8. Lessons applied` follows (see below) — that heading is not enforced by the hook but is still required by the workflow.
+
 Investigation rules:
 
 - Do not guess. Read actual code.
@@ -371,6 +383,8 @@ Then advance:
 # [VibesDeGoGo! Step 3 Start] step=3, phase=investigating, loop=0
 vdgg_state_advance 3 investigating
 ```
+
+The hook blocks Step 4 until `investigation.md` exists and contains all seven required headings each with a non-empty body.
 
 Use subagents only when parallel investigation clearly helps.
 

@@ -23,7 +23,11 @@ set -- -p --safe-mode --model "$model"
 [ -n "$effort" ] && set -- "$@" --effort "$effort"
 
 if [ -n "$output" ]; then
-  claude "$@" < "$input" > "$output"
+  # --permission-prompts none: an artifact seat is contracted to write its
+  # result to stdout, so a tool call that would prompt has no one to answer
+  # it. Refuse such calls outright instead of leaving the run hanging on an
+  # approval that never arrives.
+  claude "$@" --permission-prompts none < "$input" > "$output"
 else
   claude "$@" --permission-mode acceptEdits < "$input" >/dev/null
 fi

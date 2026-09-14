@@ -181,8 +181,12 @@ normalize_project_path() {
 }
 
 path_is_tasks_file() {
-  local p="$1"
-  [[ "$p" == "$TASKS_DIR/"* ]] || [[ "$p" == "tasks/vdgg/${VDGG_ID}/"* ]]
+  # A tool may hand us an absolute path, a bare relative one, or a ./-prefixed
+  # one; normalize before matching so all three forms are treated alike. The
+  # raw comparison silently missed the ./ form.
+  local p="${1#./}"
+  p="${p#"$CWD"/}"
+  [[ "$p" == "tasks/vdgg/${VDGG_ID}/"* ]]
 }
 
 path_is_task_allowlisted() {

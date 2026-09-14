@@ -235,6 +235,18 @@ _vdgg_normalize_project_path() {
     printf '%s\n' "$p"
 }
 
+# True when the path names one of the active session's task notes. A tool may
+# hand us an absolute path, a bare relative one, or a ./-prefixed one, so
+# normalize before matching: comparing the raw path against "$TASKS_DIR"/*
+# silently missed the ./ form, and left the directory name unquoted so any
+# path containing a glob character matched by accident.
+_vdgg_is_task_note() {
+    case "$(_vdgg_normalize_project_path "$1")" in
+        "tasks/vdgg/${VDGG_ID}/"*) return 0 ;;
+    esac
+    return 1
+}
+
 # Extract only the fields needed for the current tool type.
 
 case "$TOOL_NAME" in
@@ -367,7 +379,7 @@ case "$PHASE" in
         # During declaration/requirements, only task files may be written.
         if [ -n "${FILE_PATH:-}" ]; then
             if [ -n "$FILE_PATH" ]; then
-                if [[ "$FILE_PATH" == ${TASKS_DIR}/* ]] || [[ "$FILE_PATH" == tasks/vdgg/${VDGG_ID}/* ]]; then
+                if _vdgg_is_task_note "$FILE_PATH"; then
                     exit 0
                 fi
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
@@ -402,7 +414,7 @@ case "$PHASE" in
         # Investigation and planning may only update task documentation.
         if [ -n "${FILE_PATH:-}" ]; then
             if [ -n "$FILE_PATH" ]; then
-                if [[ "$FILE_PATH" == ${TASKS_DIR}/* ]] || [[ "$FILE_PATH" == tasks/vdgg/${VDGG_ID}/* ]]; then
+                if _vdgg_is_task_note "$FILE_PATH"; then
                     exit 0
                 fi
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
@@ -457,9 +469,7 @@ case "$PHASE" in
         # Implementation edits must stay inside the task allowlist declared by
         # vdgg_task_begin. Task notes under tasks/vdgg/{id}/ stay editable.
         if [ -n "${FILE_PATH:-}" ]; then
-            if [ -n "$FILE_PATH" ] \
-                && [[ "$FILE_PATH" != ${TASKS_DIR}/* ]] \
-                && [[ "$FILE_PATH" != tasks/vdgg/${VDGG_ID}/* ]]; then
+            if [ -n "$FILE_PATH" ] && ! _vdgg_is_task_note "$FILE_PATH"; then
                 if [ -z "$TASK_ALLOWLIST_FILE" ] || [ ! -f "$TASK_ALLOWLIST_FILE" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: No active task allowlist. Run vdgg_task_begin before editing implementation files." >&2
                     exit 2

@@ -45,8 +45,10 @@ SENTINEL="$VDGG_STATE_DIR/.vdgg-review-sentinel-${ID}-0"
 diff_hunk='{"file":"src/example.txt","hunk_start":2,"hunk_lines":2,"judgment":"ok"}'
 
 write_valid_review() {
-    local path="$1"
-    cat > "$path" <<EOF
+    # zsh ties `path` to $PATH; naming the local `path` would empty PATH here
+    # and `cat` below would not be found.
+    local dest="$1"
+    cat > "$dest" <<EOF
 {
   "lens_count": 3,
   "coverage": [ $diff_hunk ],

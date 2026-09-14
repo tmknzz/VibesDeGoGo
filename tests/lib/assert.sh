@@ -23,14 +23,16 @@ assert_exit_code() {
     [ "$expected" -eq "$actual" ] || fail "${message}: expected exit ${expected}, got ${actual}"
 }
 
+# zsh ties the name `path` to $PATH, so `local path=...` empties PATH for the
+# duration of the function. Use a name that is not special in either shell.
 assert_file_exists() {
-    local path="$1" message="$2"
-    [ -e "$path" ] || fail "${message}: missing ${path}"
+    local target="$1" message="$2"
+    [ -e "$target" ] || fail "${message}: missing ${target}"
 }
 
 assert_file_not_exists() {
-    local path="$1" message="$2"
-    [ ! -e "$path" ] || fail "${message}: unexpected ${path}"
+    local target="$1" message="$2"
+    [ ! -e "$target" ] || fail "${message}: unexpected ${target}"
 }
 
 assert_contains() {

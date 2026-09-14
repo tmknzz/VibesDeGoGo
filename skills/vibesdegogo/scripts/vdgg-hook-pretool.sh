@@ -362,6 +362,40 @@ case "$PHASE" in
                 exit 2
             fi
         fi
+        # investigation.md is mandatory before planning starts, and it must
+        # contain all seven required headings each with a non-empty body so the
+        # session cannot advance to Step 4 on a shallow or skeleton investigation.
+        # The seven headings are the canonical Step 3 output contract defined in
+        # references/subagent_prompts.md.
+        if [ "$PHASE" = "investigating" ] && [ "$TOOL_NAME" = "Bash" ]; then
+            if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning([[:space:]]|$)'; then
+                INV_FILE="${TASKS_DIR}/investigation.md"
+                if [ ! -f "$INV_FILE" ]; then
+                    echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md is required before planning." >&2
+                    exit 2
+                fi
+                # Seven direct pattern-action blocks mirror the Step 2->3 gate style
+                # above. Adding or renaming a heading requires editing this block,
+                # SKILL.md's Step 3 list, and references/subagent_prompts.md together;
+                # a drift test in tests/ enforces that they stay in sync.
+                if ! awk '
+                    BEGIN { current = 0 }
+                    /^## 1\. Related files[[:space:]]*$/                { seen[1]=1; current=1; next }
+                    /^## 2\. Existing implementation patterns[[:space:]]*$/ { seen[2]=1; current=2; next }
+                    /^## 3\. Impact surface[[:space:]]*$/               { seen[3]=1; current=3; next }
+                    /^## 4\. Prior similar implementations[[:space:]]*$/ { seen[4]=1; current=4; next }
+                    /^## 5\. Side effects and risks[[:space:]]*$/       { seen[5]=1; current=5; next }
+                    /^## 6\. Constraints[[:space:]]*$/                  { seen[6]=1; current=6; next }
+                    /^## 7\. Verification strategy[[:space:]]*$/        { seen[7]=1; current=7; next }
+                    current > 0 && /^## /               { current = 0 }
+                    current > 0 && /[^[:space:]]/       { body[current] = 1 }
+                    END { for (i = 1; i <= 7; i++) if (!seen[i] || !body[i]) exit 1 }
+                ' "$INV_FILE"; then
+                    echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md must include all seven required Step 3 headings each with a non-empty body (see SKILL.md Step 3 or references/subagent_prompts.md)." >&2
+                    exit 2
+                fi
+            fi
+        fi
         ;;
 
     task-selected)

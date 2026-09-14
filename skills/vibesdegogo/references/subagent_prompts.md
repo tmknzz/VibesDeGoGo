@@ -18,14 +18,15 @@ Inputs:
 Write:
 - <tasks_dir>/investigation.md
 
-Use exactly these headings:
-1. Related files
-2. Existing implementation patterns
-3. Impact surface
-4. Prior similar implementations
-5. Side effects and risks
-6. Constraints
-7. Verification strategy
+Use exactly these level-2 Markdown headings, verbatim (each must have a non-empty body — the Step 3->4 hook gate rejects a missing heading or an empty section):
+
+## 1. Related files
+## 2. Existing implementation patterns
+## 3. Impact surface
+## 4. Prior similar implementations
+## 5. Side effects and risks
+## 6. Constraints
+## 7. Verification strategy
 ```
 
 ## Step 4 Planning Subagent

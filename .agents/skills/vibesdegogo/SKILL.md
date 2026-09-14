@@ -292,6 +292,18 @@ vdgg_state_advance 2 requirements
 
 ## Step 3: Investigation
 
+`investigation.md` MUST use exactly these seven level-2 headings, each with a non-empty body — the hook that opens Step 4 checks every heading and every body:
+
+1. `## 1. Related files`
+2. `## 2. Existing implementation patterns`
+3. `## 3. Impact surface`
+4. `## 4. Prior similar implementations`
+5. `## 5. Side effects and risks`
+6. `## 6. Constraints`
+7. `## 7. Verification strategy`
+
+An additional `## Lessons applied` section follows (see below) — that heading is not enforced by the hook but is still required by the workflow.
+
 - Read actual project files. Do not guess.
 - Trace direct callers and impact.
 - Read lessons from recent sessions and record the applicable ones in `investigation.md` under a `## Lessons applied` heading (write `none applicable` when nothing fits):
@@ -311,6 +323,8 @@ VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.agents/skills/vibesdegogo}"
 source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 3 investigating
 ```
+
+The hook blocks Step 4 until `investigation.md` exists and contains all seven required headings each with a non-empty body.
 
 ## Step 4: Planning
 

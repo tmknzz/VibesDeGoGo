@@ -10,6 +10,8 @@ It MUST NOT be `source`d. It is a repository-controlled file, so sourcing it (or
 
 `VDGG_FORMATION` is an environment variable (not a `.vdgg-target` key). When set, it names a Formation from `${VDGG_CONFIG_DIR:-$HOME/.config/vdgg}/formations/<name>.conf` that assigns an AI to every Step. Step 1 reads it and calls `vdgg_state_init --formation "$VDGG_FORMATION"`, which validates the Formation and all referenced executors before creating the state file; the name is persisted in the state file so later `vdgg_formation_resolve <STEP_KEY>` calls do not need to re-pass it. See `SKILL.md` "Step AI Formations" for the full protocol.
 
+`VDGG_AUTO_MERGE` is an environment variable (not a `.vdgg-target` key). When it is set to the literal value `on`, Step 9's `branch-pr` workflow does not stop for human merge approval: it waits for the PR's checks and merges it. Any other value, or the variable being unset, keeps the default behavior of creating the PR and stopping. Set it in the shell profile to apply it to every repository.
+
 ## Fields
 
 ```bash

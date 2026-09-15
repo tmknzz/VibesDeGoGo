@@ -3,6 +3,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tests/lib/assert.sh"
+. "$ROOT/tests/lib/sentinel-fixtures.sh"
 
 . "$ROOT/tests/lib/req-fixtures.sh"
 
@@ -87,12 +88,7 @@ assert_exit_code 0 "$STATUS" "read-like tools pass during investigation"
 
 # Review gate: a clean review sentinel (written by vdgg_review_run) satisfies verified.
 write_state testing 7
-cat > "$TMPDIR_VDGG/.claude/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-started_at=2026-06-11T00:00:00Z
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.claude" test-id 0
 STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0\nvdgg_state_advance 7 verified"}}')
 assert_exit_code 0 "$STATUS" "verified transition is allowed with clean review sentinel"
 assert_file_not_exists "$TMPDIR_VDGG/.claude/.vdgg-review-sentinel-test-id-0" "review sentinel is consumed on verified"
@@ -137,12 +133,7 @@ assert_exit_code 0 "$STATUS" "verified passes when countersign=clean recorded"
 
 # Review gate: a modified review sentinel blocks verified.
 write_state testing 7
-cat > "$TMPDIR_VDGG/.claude/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-started_at=2026-06-11T00:00:00Z
-modified=1
-modified_files=src/foo.sh
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.claude" test-id 0 1 src/foo.sh
 STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0\nvdgg_state_advance 7 verified"}}')
 assert_exit_code 2 "$STATUS" "verified transition is blocked when review modified code"
 rm -f "$TMPDIR_VDGG/.claude/.vdgg-review-sentinel-test-id-0"
@@ -259,12 +250,7 @@ assert_exit_code 0 "$STATUS" "task notes edit passes without allowlist"
 
 # Task gate: verified is blocked when the allowlist is active but the gate has not passed.
 write_state_with_allowlist testing 7
-cat > "$TMPDIR_VDGG/.claude/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-started_at=2026-06-11T00:00:00Z
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.claude" test-id 0
 STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0\nvdgg_state_advance 7 verified"}}')
 assert_exit_code 2 "$STATUS" "verified is blocked without task gate pass"
 

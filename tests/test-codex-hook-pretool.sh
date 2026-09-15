@@ -3,6 +3,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tests/lib/assert.sh"
+. "$ROOT/tests/lib/sentinel-fixtures.sh"
 
 . "$ROOT/tests/lib/req-fixtures.sh"
 
@@ -65,20 +66,12 @@ assert_exit_code 2 "$STATUS" "verified transition is blocked without review sent
 
 write_state_with_allowlist testing 7
 mkdir -p "$TMPDIR_VDGG/.codex"
-cat > "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.codex" test-id 0
 STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"# [VibesDeGoGo! Step 7 Start] step=7, phase=verified, loop=0\nvdgg_state_advance 7 verified"}}')
 assert_exit_code 2 "$STATUS" "verified transition is blocked without task gate"
 
 write_state_with_allowlist testing 7
-cat > "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.codex" test-id 0
 cat > "$TMPDIR_VDGG/.codex/.vdgg-task-gate-test-id-0" <<EOF
 passed=1
 EOF

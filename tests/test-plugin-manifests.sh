@@ -31,3 +31,16 @@ done < <(jq -r '.hooks[][].hooks[].command' "$ROOT/hooks/hooks.json")
 PLUGIN_VERSION=$(jq -r '.version' "$ROOT/.claude-plugin/plugin.json")
 SKILL_VERSION=$(grep '^version:' "$ROOT/skills/vibesdegogo/SKILL.md" | awk '{print $2}')
 assert_eq "$PLUGIN_VERSION" "$SKILL_VERSION" "plugin.json version matches SKILL.md"
+
+# hooks.json と setup.md が同じスクリプト集合を参照していること。
+HOOKS_SCRIPTS=$(jq -r '.hooks[][].hooks[].command' "$ROOT/hooks/hooks.json" \
+    | grep -oE 'vdgg-hook-[a-z]+\.sh' | sort -u)
+SETUP_SCRIPTS=$(grep -oE 'vdgg-hook-[a-z]+\.sh' \
+    "$ROOT/skills/vibesdegogo/references/setup.md" | sort -u)
+assert_eq "$HOOKS_SCRIPTS" "$SETUP_SCRIPTS" \
+    "hooks.json and setup.md reference the same hook scripts"
+
+# plugin.json と marketplace.json の plugin 説明文が一致すること。
+PLUGIN_DESC=$(jq -r '.description' "$ROOT/.claude-plugin/plugin.json")
+MP_DESC=$(jq -r '.plugins[0].description' "$ROOT/.claude-plugin/marketplace.json")
+assert_eq "$PLUGIN_DESC" "$MP_DESC" "plugin description matches marketplace entry"

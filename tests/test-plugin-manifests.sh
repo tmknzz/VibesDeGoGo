@@ -44,3 +44,16 @@ assert_eq "$HOOKS_SCRIPTS" "$SETUP_SCRIPTS" \
 PLUGIN_DESC=$(jq -r '.description' "$ROOT/.claude-plugin/plugin.json")
 MP_DESC=$(jq -r '.plugins[0].description' "$ROOT/.claude-plugin/marketplace.json")
 assert_eq "$PLUGIN_DESC" "$MP_DESC" "plugin description matches marketplace entry"
+
+# 各イベントの matcher が意図どおりであること。PreToolUse は空文字を保つ:
+# vdgg-hook-pretool.sh は file_path / notebook_path を持つ未知ツールも
+# 検査するので、既知ツールの列挙に絞るとそのガードを迂回できてしまう。
+assert_matcher() {
+    local event="$1" expected="$2" actual
+    actual=$(jq -r --arg e "$event" '.hooks[$e][].matcher' "$ROOT/hooks/hooks.json")
+    assert_eq "$expected" "$actual" "hooks.json ${event} matcher"
+}
+assert_matcher PreToolUse ""
+assert_matcher PostToolUse "Bash|Skill|Edit|Write"
+assert_matcher PostToolUseFailure "Bash|Skill|Edit|Write"
+assert_matcher Stop ""

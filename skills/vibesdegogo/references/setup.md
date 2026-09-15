@@ -59,7 +59,7 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
 ```json
 "PostToolUse": [
   {
-    "matcher": "",
+    "matcher": "Bash|Skill|Edit|Write",
     "hooks": [
       {
         "type": "command",
@@ -71,7 +71,7 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
 ],
 "PostToolUseFailure": [
   {
-    "matcher": "",
+    "matcher": "Bash|Skill|Edit|Write",
     "hooks": [
       {
         "type": "command",
@@ -95,7 +95,11 @@ Also register PostToolUse, PostToolUseFailure, and Stop hooks:
 ]
 ```
 
-PostToolUse must match all tools, not only Bash. It must observe `Skill` calls for simplify and `Edit`/`Write` calls after simplify.
+PostToolUse and PostToolUseFailure must observe Bash, Skill, Edit, and Write.
+Keep these matchers aligned with the tool filter in vdgg-hook-posttool.sh.
+PreToolUse must continue to match all tools: vdgg-hook-pretool.sh also checks
+unknown tools that expose file_path or notebook_path. A fixed list of known
+write tools would bypass those guards. Keep its read-only fast paths as well.
 
 ## 4. Project Setup
 

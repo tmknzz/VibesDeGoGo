@@ -65,9 +65,14 @@ if [ ! -f "$STATE_FILE" ]; then
     exit 0
 fi
 
-PHASE=$(grep "^phase=" "$STATE_FILE" | cut -d= -f2 || true)
-STEP=$(grep "^step=" "$STATE_FILE" | cut -d= -f2 || true)
-LOOP_COUNT=$(grep "^loop_count=" "$STATE_FILE" | cut -d= -f2 || true)
+# 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので常に f2- を使う。
+_vdgg_state_get() {
+    grep "^$1=" "$2" | head -1 | cut -d= -f2- || true
+}
+
+PHASE=$(_vdgg_state_get phase "$STATE_FILE")
+STEP=$(_vdgg_state_get step "$STATE_FILE")
+LOOP_COUNT=$(_vdgg_state_get loop_count "$STATE_FILE")
 LOOP_COUNT="${LOOP_COUNT:-0}"
 
 if [ -z "$PHASE" ]; then
@@ -133,20 +138,19 @@ fi
 # until reflection/re-test. Both sentinel kinds get the same tracking.
 if [ "$PHASE" = "testing" ] && { [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ]; }; then
     EDITED_FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+    # Sidecar files are internal workflow files, not implementation changes.
+    # (Pretool also blocks editing them; this guard is defense in depth.)
+    if [[ "$EDITED_FILE_PATH" == *".claude/.vdgg-"* ]]; then
+        exit 0
+    fi
+    # Task notes are workflow records, not implementation changes.
+    if [[ "$EDITED_FILE_PATH" == *"tasks/vdgg/${VDGG_ID}"* ]]; then
+        exit 0
+    fi
     for SENTINEL_FILE in \
         "$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}" \
         "$CWD/.claude/.vdgg-review-sentinel-${VDGG_ID}-${LOOP_COUNT}"; do
         [ -f "$SENTINEL_FILE" ] || continue
-        # Sidecar files are internal workflow files, not implementation changes.
-        # (Pretool also blocks editing them; this guard is defense in depth.)
-        if [[ "$EDITED_FILE_PATH" == *".claude/.vdgg-"* ]]; then
-            continue
-        fi
-        # Task notes are workflow records, not implementation changes.
-        TASKS_DIR_BASENAME="tasks/vdgg/${VDGG_ID}"
-        if [[ "$EDITED_FILE_PATH" == *"$TASKS_DIR_BASENAME"* ]]; then
-            continue
-        fi
         # Append the edited file once.
         CURRENT_FILES=$(grep '^modified_files=' "$SENTINEL_FILE" | head -1 | sed 's/^modified_files=//')
         if [ -n "$EDITED_FILE_PATH" ] && [[ ",$CURRENT_FILES," != *",$EDITED_FILE_PATH,"* ]]; then

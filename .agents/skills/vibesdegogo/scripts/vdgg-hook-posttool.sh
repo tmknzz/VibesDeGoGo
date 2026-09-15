@@ -25,8 +25,13 @@ STATE_FILE="$CWD/.codex/.vdgg-state-${VDGG_ID}"
 
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
-PHASE=$(grep '^phase=' "$STATE_FILE" | cut -d= -f2 || true)
-LOOP_COUNT=$(grep '^loop_count=' "$STATE_FILE" | cut -d= -f2 || true)
+# 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので常に f2- を使う。
+_vdgg_state_get() {
+  grep "^$1=" "$2" | head -1 | cut -d= -f2- || true
+}
+
+PHASE=$(_vdgg_state_get phase "$STATE_FILE")
+LOOP_COUNT=$(_vdgg_state_get loop_count "$STATE_FILE")
 LOOP_COUNT="${LOOP_COUNT:-0}"
 
 if [ "$TOOL_NAME" = "apply_patch" ] && [ "$PHASE" = "testing" ]; then

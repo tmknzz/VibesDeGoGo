@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# `git commit` を単語として捉えるパターン。commit guard の 3 箇所が
+# 同じ判定を共有するため、ここ 1 箇所で定義する。
+GIT_COMMIT_PATTERN='(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'
+
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -90,7 +94,7 @@ _vdgg_entry_gate() {
         if printf '%s' "$seg_checked" | grep -qE '(>[^&]|>>|(^|[[:space:]])tee([[:space:]]|$))'; then
           _vdgg_entry_deny
         fi
-        if printf '%s' "$seg" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+        if printf '%s' "$seg" | grep -qE "$GIT_COMMIT_PATTERN"; then
           _vdgg_entry_deny
         fi
         verb=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*//; s/[[:space:]].*//')
@@ -133,11 +137,16 @@ STATE_FILE="$CWD/.codex/.vdgg-state-${VDGG_ID}"
 
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
-PHASE=$(grep '^phase=' "$STATE_FILE" | cut -d= -f2 || true)
-STEP=$(grep '^step=' "$STATE_FILE" | cut -d= -f2 || true)
-LOOP_COUNT=$(grep '^loop_count=' "$STATE_FILE" | cut -d= -f2 || true)
+# 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので常に f2- を使う。
+_vdgg_state_get() {
+  grep "^$1=" "$2" | head -1 | cut -d= -f2- || true
+}
+
+PHASE=$(_vdgg_state_get phase "$STATE_FILE")
+STEP=$(_vdgg_state_get step "$STATE_FILE")
+LOOP_COUNT=$(_vdgg_state_get loop_count "$STATE_FILE")
 LOOP_COUNT="${LOOP_COUNT:-0}"
-TASK_ALLOWLIST_FILE=$(grep '^task_allowlist_file=' "$STATE_FILE" | cut -d= -f2- || true)
+TASK_ALLOWLIST_FILE=$(_vdgg_state_get task_allowlist_file "$STATE_FILE")
 TASK_GATE_FILE="$CWD/.codex/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 TASKS_DIR="$CWD/tasks/vdgg/${VDGG_ID}"
 
@@ -230,7 +239,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
       *".codex/.vdgg-"*|*".vdgg-target"*) ;;
       *) continue ;;
     esac
-    if printf '%s' "$_vdgg_seg" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+    if printf '%s' "$_vdgg_seg" | grep -qE "$GIT_COMMIT_PATTERN"; then
       continue
     fi
     _vdgg_verb=$(printf '%s' "$_vdgg_seg" | sed -E 's/^[[:space:]]*//; s/[[:space:]].*//')
@@ -306,7 +315,7 @@ case "$PHASE" in
           || block "Task allowlist blocks edit: $(normalize_project_path "$file_path")"
       done < <(changed_files)
     fi
-    if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+    if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$COMMAND" | grep -qE "$GIT_COMMIT_PATTERN"; then
       block "Commit is blocked before Step 9."
     fi
     # A failed test must go through reflection before more implementation.
@@ -382,7 +391,7 @@ case "$PHASE" in
         # No code edits after verification; configured version files may change
         # only during progress/commit, never in verified.
         if [ "$PHASE" != "verified" ] && [ -f "$CWD/.vdgg-target" ]; then
-          if grep -E '^VERSION_FILE_[0-9]+_PATH=' "$CWD/.vdgg-target" | sed -E 's/^[^=]*=//; s/^"(.*)"$/\1/' | grep -qx "$file_path"; then
+          if grep -E '^VERSION_FILE_[0-9]+_PATH=' "$CWD/.vdgg-target" | sed -E 's/^[^=]*=//' | sed -E 's/^"(.*)"$/\1/' | sed -E "s/^'(.*)'\$/\\1/" | grep -qx "$file_path"; then
             continue
           fi
         fi

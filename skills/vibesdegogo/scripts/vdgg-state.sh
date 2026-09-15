@@ -1437,7 +1437,7 @@ vdgg_review_run() {
     else
         local review_command=""
         if [ -f "${VDGG_CWD}/.vdgg-target" ]; then
-            review_command=$(grep '^REVIEW_COMMAND=' "${VDGG_CWD}/.vdgg-target" | head -1 | sed -E 's/^[^=]*=//; s/^"(.*)"$/\1/')
+            review_command=$(grep '^REVIEW_COMMAND=' "${VDGG_CWD}/.vdgg-target" | head -1 | sed -E 's/^[^=]*=//' | sed -E 's/^"(.*)"$/\1/' | sed -E "s/^'(.*)'\$/\\1/")
         fi
         if [ -z "$review_command" ]; then
             echo "vdgg_review_run: no command given and no REVIEW_COMMAND in .vdgg-target" >&2

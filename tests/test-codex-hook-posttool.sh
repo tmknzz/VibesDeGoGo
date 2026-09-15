@@ -3,6 +3,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tests/lib/assert.sh"
+. "$ROOT/tests/lib/sentinel-fixtures.sh"
 
 POSTTOOL="$ROOT/.agents/skills/vibesdegogo/scripts/vdgg-hook-posttool.sh"
 TMPDIR_VDGG=$(mktemp -d)
@@ -86,11 +87,7 @@ assert_file_not_exists "$TMPDIR_VDGG/.codex/.vdgg-error-pending" "missing tool_r
 # Review sentinel: Edit during testing flips modified=1 on the review sentinel.
 write_state testing 7
 mkdir -p "$TMPDIR_VDGG/src"
-cat > "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.codex" test-id 0
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/src/foo.sh"}}')
 assert_exit_code 0 "$STATUS" "posttool exits cleanly while tracking review sentinel"
 MODIFIED=$(grep '^modified=' "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" | cut -d= -f2)
@@ -100,11 +97,7 @@ rm -f "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0"
 # Review sentinel: task-notes edits do not flip the sentinel.
 write_state testing 7
 mkdir -p "$TMPDIR_VDGG/tasks/vdgg/test-id"
-cat > "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" <<EOF
-started=1
-modified=0
-modified_files=
-EOF
+write_review_sentinel "$TMPDIR_VDGG/.codex" test-id 0
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/tasks/vdgg/test-id/progress.md"}}')
 assert_exit_code 0 "$STATUS" "posttool exits cleanly for task-notes edit"
 MODIFIED=$(grep '^modified=' "$TMPDIR_VDGG/.codex/.vdgg-review-sentinel-test-id-0" | cut -d= -f2)

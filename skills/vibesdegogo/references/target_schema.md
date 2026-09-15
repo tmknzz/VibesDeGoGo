@@ -2,7 +2,7 @@
 
 `.vdgg-target` is an optional project-root file. It is a plain `KEY=VALUE` text file that tells Step 8 and Step 9 how to update versions, validate changes, and push work.
 
-It MUST NOT be `source`d. It is a repository-controlled file, so sourcing it (or otherwise evaluating its values as shell) would let an untrusted repository run arbitrary code. Read individual keys instead, e.g. `grep -m1 '^WORKFLOW=' .vdgg-target | sed -E 's/^[^=]*=//; s/^"(.*)"$/\1/'`, and validate the value before use. The hooks already parse it this way.
+It MUST NOT be `source`d. It is a repository-controlled file, so sourcing it (or otherwise evaluating its values as shell) would let an untrusted repository run arbitrary code. Read individual keys instead, e.g. `grep -m1 '^WORKFLOW=' .vdgg-target | sed -E 's/^[^=]*=//' | sed -E 's/^"(.*)"$/\1/' | sed -E "s/^'(.*)'\$/\\1/"`, and validate the value before use. The hooks already parse it this way.
 
 `REVIEW_COMMAND` is executed via `bash -c`. Treat it as a trust boundary: only use this key when a human placed the file. Do not use this executable key from a `.vdgg-target` that shipped inside an untrusted cloned repository; if in doubt, show the value and get confirmation first. To keep the agent from self-authoring this key to forge a passing review, the PreToolUse hook blocks Edit/Write/Bash writes to `.vdgg-target` (reads stay allowed), the same way it protects the `.claude/.vdgg-*` sidecars.
 
@@ -102,7 +102,7 @@ AUTO_PUSH=false
 
 `branch-pr` is the default:
 
-1. Step 1 creates a feature branch named from the Step 0 Goal, in `{type}/{slug}` form (e.g., `feat/japanese-readme`). See Step 1 in `SKILL.md`.
+1. Step 1 creates a feature branch named from the Step 0 Goal, in `{type}/{slug}` form (e.g., `feat/japanese-readme`). See Step 1 in `SKILL.md`. `{type}` and `{slug}` are placeholders the agent substitutes; they are not shell variables and are never expanded by the shell.
 2. Step 9 commits there.
 3. Step 9 pushes the branch and creates a PR.
 4. The agent stops. A human decides whether to merge.

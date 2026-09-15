@@ -8,7 +8,7 @@
     {
       "name": "vibesdegogo",
       "source": ".",
-      "description": "A state-and-hook workflow that keeps coding agents moving until done while stopping only before constraint violations."
+      "description": "A state-and-hook workflow for Claude Code that keeps coding agents moving until done while stopping only before constraint violations."
     }
   ]
 }

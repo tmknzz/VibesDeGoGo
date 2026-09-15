@@ -6,6 +6,9 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
+    # Keep jq install-command detection and guidance aligned across the Claude
+    # pretool/posttool and Codex pretool hooks. Their activation checks differ;
+    # Codex posttool intentionally exits 0 without jq and has no install guidance.
     # Without jq the hook JSON cannot be parsed properly. Best-effort: extract
     # cwd with grep/sed and check for an active VibesDeGoGo! session there. No
     # active session -> stay out of the way so unrelated repositories are never
@@ -49,6 +52,10 @@ _vdgg_mtime() {
     case "$m" in ''|*[!0-9]*) m=0 ;; esac
     printf '%s\n' "$m"
 }
+
+# `git commit` を単語として捉えるパターン。commit guard の 3 箇所が
+# 同じ判定を共有するため、ここ 1 箇所で定義する。
+GIT_COMMIT_PATTERN='(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 
@@ -111,7 +118,7 @@ _vdgg_entry_gate() {
                 if echo "$seg_checked" | grep -qE '(>[^&]|>>|(^|[[:space:]])tee([[:space:]]|$))'; then
                     _vdgg_entry_deny
                 fi
-                if echo "$seg" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+                if echo "$seg" | grep -qE "$GIT_COMMIT_PATTERN"; then
                     _vdgg_entry_deny
                 fi
                 verb=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*//; s/[[:space:]].*//')
@@ -164,11 +171,16 @@ if [ ! -f "$STATE_FILE" ]; then
     _vdgg_unarmed_exit
 fi
 
-PHASE=$(grep "^phase=" "$STATE_FILE" | cut -d= -f2 || true)
-STEP=$(grep "^step=" "$STATE_FILE" | cut -d= -f2 || true)
-LOOP_COUNT=$(grep "^loop_count=" "$STATE_FILE" | cut -d= -f2 || true)
+# 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので常に f2- を使う。
+_vdgg_state_get() {
+    grep "^$1=" "$2" | head -1 | cut -d= -f2- || true
+}
+
+PHASE=$(_vdgg_state_get phase "$STATE_FILE")
+STEP=$(_vdgg_state_get step "$STATE_FILE")
+LOOP_COUNT=$(_vdgg_state_get loop_count "$STATE_FILE")
 LOOP_COUNT="${LOOP_COUNT:-0}"
-TASK_ALLOWLIST_FILE=$(grep "^task_allowlist_file=" "$STATE_FILE" | cut -d= -f2- || true)
+TASK_ALLOWLIST_FILE=$(_vdgg_state_get task_allowlist_file "$STATE_FILE")
 TASK_GATE_FILE="$CWD/.claude/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 
 # Friction log: record that a gate refused this tool call, so Step 6-R can name
@@ -268,7 +280,8 @@ if [ "$TOOL_NAME" = "Bash" ] && [ -f "$ERROR_FLAG" ]; then
     if echo "$COMMAND" | grep -qF '[Error Acknowledged]'; then
         rm -f "$ERROR_FLAG"
     else
-        ERROR_REASON=$(grep "^reason=" "$ERROR_FLAG" | cut -d= -f2- || echo "unknown")
+        ERROR_REASON=$(_vdgg_state_get reason "$ERROR_FLAG")
+        ERROR_REASON="${ERROR_REASON:-unknown}"
         echo "VibesDeGoGo! [${VDGG_ID}]: Previous Bash command failed ($ERROR_REASON). Include [Error Acknowledged] with a short plan in your next Bash command." >&2
         exit 2
     fi
@@ -309,7 +322,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
             *".claude/.vdgg-"*|*".vdgg-target"*) ;;
             *) continue ;;
         esac
-        if echo "$_vdgg_seg" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+        if echo "$_vdgg_seg" | grep -qE "$GIT_COMMIT_PATTERN"; then
             continue
         fi
         _vdgg_verb=$(printf '%s' "$_vdgg_seg" | sed -E 's/^[[:space:]]*//; s/[[:space:]].*//')
@@ -473,7 +486,7 @@ case "$PHASE" in
         fi
         # Commit only after verification and progress are complete.
         if [ "$TOOL_NAME" = "Bash" ]; then
-            if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+commit($|[[:space:]])'; then
+            if echo "$COMMAND" | grep -qE "$GIT_COMMIT_PATTERN"; then
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
                 exit 2
             fi

@@ -18,6 +18,15 @@ grouped by edition. Their histories are merged into this repository.
   task's lines to stderr so Step 6-R sees them without opening the file.
   `vdgg_state_clear` prints the counts for the completion report.
 
+### Fixed
+
+- `.vdgg-target` values wrapped in single quotes are now unquoted like
+  double-quoted ones. `REVIEW_COMMAND='cmd with args'` previously reached
+  `bash -c` with the quotes attached and failed as a single unknown command
+  name; `VERSION_FILE_*_PATH` in the Codex PreToolUse hook had the same gap.
+  Both editions now strip either quote style, matching what the Claude Code
+  PreToolUse hook already did and what `target_schema.md` documents.
+
 ### Removed
 
 - **Breaking:** `vdgg_state_mark_reviewed` is no longer a public helper in either

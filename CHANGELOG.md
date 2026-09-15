@@ -9,6 +9,15 @@ grouped by edition. Their histories are merged into this repository.
 
 ## [Unreleased]
 
+### Added
+
+- Session friction log (Claude Code edition). The hooks and `vdgg_state_loop`
+  append a `deny`, `stop`, or `loop` line to `.claude/.vdgg-friction-{id}`
+  when a gate refuses a tool call or a silent stop, or a retry starts.
+  `vdgg_task_begin` marks a task boundary, and entering `reflection` prints this
+  task's lines to stderr so Step 6-R sees them without opening the file.
+  `vdgg_state_clear` prints the counts for the completion report.
+
 ### Fixed
 
 - `.vdgg-target` values wrapped in single quotes are now unquoted like

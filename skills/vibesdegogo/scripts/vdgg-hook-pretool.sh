@@ -183,6 +183,53 @@ LOOP_COUNT="${LOOP_COUNT:-0}"
 TASK_ALLOWLIST_FILE=$(_vdgg_state_get task_allowlist_file "$STATE_FILE")
 TASK_GATE_FILE="$CWD/.claude/.vdgg-task-gate-${VDGG_ID}-${LOOP_COUNT}"
 
+# Friction log: record that a gate refused this tool call, so Step 6-R can name
+# where a loop kept catching. One EXIT trap covers all 30-odd `exit 2` sites
+# below instead of editing each one.
+#
+# `gate` is the line number of the `exit` that fired, which lets one trap
+# identify a gate as precisely as editing every site would. `phase` cannot --
+# under `implementing` alone it merges four guards (test commands, sidecar
+# writes, out-of-allowlist edits, the runaway-loop cap). Line numbers move
+# whenever this file is edited, so they only mean anything within the session
+# that wrote them; anything durable must quote the gate's rule, not its number.
+#
+# The line comes from a DEBUG trap rather than BASH_LINENO or LINENO: bash 5
+# resets both to 1 once the EXIT trap starts, while bash 3.2 does not. The DEBUG
+# trap keeps the last two line numbers and fires once more for the EXIT trap's
+# own command on both versions, so the older of the two is the `exit` line.
+# That holds only while the EXIT trap string stays a single command. DEBUG
+# traps are not inherited by functions, so an `exit` inside a function reports
+# the line before the call, not the `exit` itself; nothing below this point
+# exits that way. A `set -e` death inside a function mislocates it the same
+# way; the calls below are all assignments or `if !` conditions, where errexit
+# does not propagate.
+#
+# Known limit: exit status 2 is a proxy for "a gate refused this". grep and jq
+# also exit 2 on their own errors, so a defect in this hook can be logged as
+# user friction, and a gate that ever answers with a JSON permissionDecision
+# would stop being counted. Both are miscounts in a log, not failures of the
+# gate itself.
+#
+# Everything above this line runs before VDGG_ID exists (the jq-missing exit,
+# the entry gate), so pre-arm refusals are out of scope structurally: move this
+# block up there and `set -u` fails on VDGG_ID rather than silently widening
+# what counts as friction. FRICTION_FILE must stay global -- the trap fires
+# after this point in a scope where a `local` would be gone, and under `set -u`
+# that dies during expansion, before `2>/dev/null` or `|| true` can apply.
+FRICTION_FILE="$CWD/.claude/.vdgg-friction-${VDGG_ID}"
+_vdgg_friction_on_exit() {
+    [ "${1:-0}" = "2" ] || return 0
+    # Append-only and short: concurrent pretool invocations write under
+    # O_APPEND well below PIPE_BUF, so no write can clobber another.
+    # Failing to log must never change whether the call is refused.
+    printf 'deny phase=%s loop=%s tool=%s gate=%s\n' \
+        "${PHASE:-}" "${LOOP_COUNT:-}" "${TOOL_NAME:-}" "${_vdgg_prev_line:-}" \
+        2>/dev/null >> "$FRICTION_FILE" || true
+}
+trap '_vdgg_friction_on_exit $?' EXIT
+trap '_vdgg_prev_line=${_vdgg_line:-}; _vdgg_line=$LINENO' DEBUG
+
 if [ -z "$PHASE" ]; then
     exit 0
 fi
@@ -373,6 +420,40 @@ case "$PHASE" in
                 fi
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
                 exit 2
+            fi
+        fi
+        # investigation.md is mandatory before planning starts, and it must
+        # contain all seven required headings each with a non-empty body so the
+        # session cannot advance to Step 4 on a shallow or skeleton investigation.
+        # The seven headings are the canonical Step 3 output contract defined in
+        # references/subagent_prompts.md.
+        if [ "$PHASE" = "investigating" ] && [ "$TOOL_NAME" = "Bash" ]; then
+            if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning([[:space:]]|$)'; then
+                INV_FILE="${TASKS_DIR}/investigation.md"
+                if [ ! -f "$INV_FILE" ]; then
+                    echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md is required before planning." >&2
+                    exit 2
+                fi
+                # Seven direct pattern-action blocks mirror the Step 2->3 gate style
+                # above. Adding or renaming a heading requires editing this block,
+                # SKILL.md's Step 3 list, and references/subagent_prompts.md together;
+                # a drift test in tests/ enforces that they stay in sync.
+                if ! awk '
+                    BEGIN { current = 0 }
+                    /^## 1\. Related files[[:space:]]*$/                { seen[1]=1; current=1; next }
+                    /^## 2\. Existing implementation patterns[[:space:]]*$/ { seen[2]=1; current=2; next }
+                    /^## 3\. Impact surface[[:space:]]*$/               { seen[3]=1; current=3; next }
+                    /^## 4\. Prior similar implementations[[:space:]]*$/ { seen[4]=1; current=4; next }
+                    /^## 5\. Side effects and risks[[:space:]]*$/       { seen[5]=1; current=5; next }
+                    /^## 6\. Constraints[[:space:]]*$/                  { seen[6]=1; current=6; next }
+                    /^## 7\. Verification strategy[[:space:]]*$/        { seen[7]=1; current=7; next }
+                    current > 0 && /^## /               { current = 0 }
+                    current > 0 && /[^[:space:]]/       { body[current] = 1 }
+                    END { for (i = 1; i <= 7; i++) if (!seen[i] || !body[i]) exit 1 }
+                ' "$INV_FILE"; then
+                    echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md must include all seven required Step 3 headings each with a non-empty body (see SKILL.md Step 3 or references/subagent_prompts.md)." >&2
+                    exit 2
+                fi
             fi
         fi
         ;;

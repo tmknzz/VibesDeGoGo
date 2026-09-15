@@ -14,7 +14,12 @@ command -v claude >/dev/null 2>&1 || { echo "vdgg-exec-claude: claude CLI is req
 model=${VDGG_EXECUTOR_MODEL:-sonnet}
 effort=${VDGG_EXECUTOR_EFFORT:-}
 
-set -- -p --model "$model"
+# --safe-mode: this is a tool being handed a prompt, not a participant in the
+# caller's VibesDeGoGo! session. Without it the subprocess inherits the target
+# repo's CLAUDE.md and skills, reads the VDGG skill, and answers as a workflow
+# participant ("[Intentional Stop] ...") instead of producing the artifact.
+# Auth, model selection, built-in tools and permissions still work normally.
+set -- -p --safe-mode --model "$model"
 [ -n "$effort" ] && set -- "$@" --effort "$effort"
 
 if [ -n "$output" ]; then

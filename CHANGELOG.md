@@ -11,6 +11,11 @@ grouped by edition. Their histories are merged into this repository.
 
 ### Added
 
+- `VDGG_AUTO_MERGE=on` (environment variable, both editions). Step 9's
+  `branch-pr` workflow then waits for the PR's checks and merges it instead of
+  stopping for human merge approval. Unset or any other value keeps the previous
+  behavior, so nothing changes for existing users who do not set it.
+
 - Session friction log (Claude Code edition). The hooks and `vdgg_state_loop`
   append a `deny`, `stop`, or `loop` line to `.claude/.vdgg-friction-{id}`
   when a gate refuses a tool call or a silent stop, or a retry starts.

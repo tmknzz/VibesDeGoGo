@@ -666,7 +666,23 @@ Default behavior:
 3. report the PR URL,
 4. stop for human merge approval.
 
-Do not merge automatically just because CI is green.
+`VDGG_AUTO_MERGE=on` (environment variable; only the literal value `on`) removes
+step 4: after the PR is created, wait for its checks and merge it. Set it in the
+shell profile to make every repository behave this way.
+
+```bash
+if [ "${VDGG_AUTO_MERGE:-}" = "on" ]; then
+    # "no checks configured" and "checks failed" are both exit 1 from
+    # `gh pr checks`, so count them first instead of ignoring the status.
+    if [ "$(gh pr view --json statusCheckRollup -q '.statusCheckRollup | length')" -gt 0 ]; then
+        gh pr checks --watch --interval 15 || {
+            echo "vdgg: PR checks failed; not merging." >&2
+            exit 1
+        }
+    fi
+    gh pr merge --squash
+fi
+```
 
 ### trunk workflow
 

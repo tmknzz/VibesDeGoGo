@@ -236,6 +236,22 @@ _vdgg_get_state_file() {
   _vdgg_state_file_for_id "$id"
 }
 
+# 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので f2- 固定。
+_vdgg_state_field() {
+  local key="$1" state_file="$2"
+  grep "^${key}=" "$state_file" | head -1 | cut -d= -f2- || true
+}
+
+# 引数が `-` なら明示的にクリア、空なら現在値を維持、それ以外は採用。
+_vdgg_preserve_field() {
+  local value="$1" key="$2" state_file="$3"
+  case "$value" in
+    -)  printf '' ;;
+    "") _vdgg_state_field "$key" "$state_file" ;;
+    *)  printf '%s' "$value" ;;
+  esac
+}
+
 _vdgg_rm_glob() {
   [ -d "$1" ] || return 0
   find "$1" -maxdepth 1 -name "$2" -type f -exec rm -f {} + 2>/dev/null || true
@@ -270,7 +286,7 @@ _vdgg_path_is_safe_relative() {
 _vdgg_task_loop() {
   local state_file loop
   state_file=$(_vdgg_get_state_file)
-  loop=$(grep '^loop_count=' "$state_file" | cut -d= -f2)
+  loop=$(_vdgg_state_field loop_count "$state_file")
   printf '%s\n' "${loop:-0}"
 }
 
@@ -698,7 +714,7 @@ vdgg_formation_current() {
   local state_file formation=""
   state_file=$(_vdgg_get_state_file 2>/dev/null || true)
   if [ -n "$state_file" ] && [ -f "$state_file" ]; then
-    formation=$(grep '^formation=' "$state_file" | cut -d= -f2- || true)
+    formation=$(_vdgg_state_field formation "$state_file")
     printf '%s\n' "$formation"
     return 0
   fi
@@ -931,25 +947,17 @@ vdgg_state_write() {
 
   state_file=$(_vdgg_get_state_file)
   [ -f "$state_file" ] || { echo "vdgg-state: state file not found" >&2; return 1; }
-  current_step=$(grep '^step=' "$state_file" | cut -d= -f2)
+  current_step=$(_vdgg_state_field step "$state_file")
   _vdgg_check_step_transition "${current_step:-0}" "$new_step"
 
   # Omitted optional fields preserve the stored values; a literal `-` clears a
   # task field explicitly (used at the 8->5 boundary).
   if [ -z "$new_current_task" ]; then
-    new_current_task=$(grep '^current_task=' "$state_file" | cut -d= -f2- || true)
+    new_current_task=$(_vdgg_state_field current_task "$state_file")
   fi
-  if [ "$new_task_allowlist_file" = "-" ]; then
-    new_task_allowlist_file=""
-  elif [ -z "$new_task_allowlist_file" ]; then
-    new_task_allowlist_file=$(grep '^task_allowlist_file=' "$state_file" | cut -d= -f2- || true)
-  fi
-  if [ "$new_task_base_ref" = "-" ]; then
-    new_task_base_ref=""
-  elif [ -z "$new_task_base_ref" ]; then
-    new_task_base_ref=$(grep '^task_base_ref=' "$state_file" | cut -d= -f2- || true)
-  fi
-  formation=$(grep '^formation=' "$state_file" | cut -d= -f2- || true)
+  new_task_allowlist_file=$(_vdgg_preserve_field "$new_task_allowlist_file" task_allowlist_file "$state_file")
+  new_task_base_ref=$(_vdgg_preserve_field "$new_task_base_ref" task_base_ref "$state_file")
+  formation=$(_vdgg_state_field formation "$state_file")
   id=$(_vdgg_get_active_id)
   cat > "$state_file" <<EOF
 step=${new_step}
@@ -969,8 +977,8 @@ vdgg_state_advance() {
   local next_step="$1" next_phase="$2" state_file current_step current_loop current_task
   state_file=$(_vdgg_get_state_file)
   [ -f "$state_file" ] || { echo "vdgg_state_advance: state file not found" >&2; return 1; }
-  current_step=$(grep '^step=' "$state_file" | cut -d= -f2)
-  current_task=$(grep '^current_task=' "$state_file" | cut -d= -f2- || true)
+  current_step=$(_vdgg_state_field step "$state_file")
+  current_task=$(_vdgg_state_field current_task "$state_file")
   # When Step 8 continues to Step 5, start the next task with a fresh loop and
   # clear the previous task's allowlist/baseline so vdgg_task_begin is required
   # again before any new-task edits.
@@ -978,7 +986,7 @@ vdgg_state_advance() {
     vdgg_state_write "$next_step" "$next_phase" 0 "$current_task" - -
     return
   fi
-  current_loop=$(grep '^loop_count=' "$state_file" | cut -d= -f2)
+  current_loop=$(_vdgg_state_field loop_count "$state_file")
   vdgg_state_write "$next_step" "$next_phase" "${current_loop:-0}" "$current_task"
 }
 
@@ -986,8 +994,8 @@ vdgg_state_loop() {
   local loop_step="$1" loop_phase="$2" state_file current_loop current_task
   state_file=$(_vdgg_get_state_file)
   [ -f "$state_file" ] || { echo "vdgg_state_loop: state file not found" >&2; return 1; }
-  current_loop=$(grep '^loop_count=' "$state_file" | cut -d= -f2)
-  current_task=$(grep '^current_task=' "$state_file" | cut -d= -f2- || true)
+  current_loop=$(_vdgg_state_field loop_count "$state_file")
+  current_task=$(_vdgg_state_field current_task "$state_file")
   vdgg_state_write "$loop_step" "$loop_phase" "$(( ${current_loop:-0} + 1 ))" "$current_task"
 }
 
@@ -1096,7 +1104,7 @@ _vdgg_write_review_sentinel() {
   state_file=$(_vdgg_get_state_file)
   [ -f "$state_file" ] || { echo "_vdgg_write_review_sentinel: state file not found" >&2; return 1; }
   id=$(_vdgg_get_active_id)
-  loop=$(grep '^loop_count=' "$state_file" | cut -d= -f2)
+  loop=$(_vdgg_state_field loop_count "$state_file")
   review_file=$(_vdgg_review_file_for_id "$id" "${loop:-0}")
   started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   # Inherit modified / modified_files from existing sentinel (see CC edition).
@@ -1265,7 +1273,7 @@ vdgg_task_begin() {
   local current_step state_file
   state_file=$(_vdgg_state_file_for_id "$id")
   if [ -f "$state_file" ]; then
-    current_step=$(grep "^step=" "$state_file" | cut -d= -f2)
+    current_step=$(_vdgg_state_field step "$state_file")
     if ! _vdgg_check_step_transition "${current_step:-0}" 5 2>/dev/null; then
       echo "vdgg_task_begin: blocked — cannot (re)arm a task outside Step 5 (current step=${current_step})." >&2
       echo "vdgg_task_begin: fit the change to the current allowlist, or take the extra scope as a new task via Step 8 -> Step 5." >&2
@@ -1326,7 +1334,7 @@ vdgg_task_changed_files() {
   loop=$(_vdgg_task_loop)
   # Prefer the baseline recorded at vdgg_task_begin so the comparison stays
   # anchored to the task even after vdgg_state_loop increments the loop.
-  baseline_status=$(grep '^task_base_ref=' "$(_vdgg_get_state_file)" | cut -d= -f2- || true)
+  baseline_status=$(_vdgg_state_field task_base_ref "$(_vdgg_get_state_file)")
   [ -n "$baseline_status" ] || baseline_status=$(_vdgg_task_baseline_status_for_id "$id" "$loop")
   current_status=$(mktemp)
   git -C "$VDGG_CWD" status --porcelain=v1 --untracked-files=all > "$current_status"
@@ -1343,7 +1351,7 @@ vdgg_task_check_allowlist() {
   [ -n "$id" ] || { echo "vdgg_task_check_allowlist: active session not found" >&2; return 1; }
   loop=$(_vdgg_task_loop)
   # Resolve from state so the allowlist survives vdgg_state_loop increments.
-  allowlist_file=$(grep '^task_allowlist_file=' "$(_vdgg_get_state_file)" | cut -d= -f2- || true)
+  allowlist_file=$(_vdgg_state_field task_allowlist_file "$(_vdgg_get_state_file)")
   [ -n "$allowlist_file" ] || allowlist_file=$(_vdgg_task_allowlist_file_for_id "$id" "$loop")
   [ -f "$allowlist_file" ] || { echo "vdgg_task_check_allowlist: allowlist not found" >&2; return 1; }
   changed=$(vdgg_task_changed_files)
@@ -1376,16 +1384,17 @@ EOF
 }
 
 vdgg_task_rollback() {
-  local id loop allowlist_file base_ref baseline_dir gate_file changed file
+  local id loop state_file allowlist_file base_ref baseline_dir gate_file changed file
   id=$(_vdgg_get_active_id)
   [ -n "$id" ] || { echo "vdgg_task_rollback: active session not found" >&2; return 1; }
   loop=$(_vdgg_task_loop)
+  state_file=$(_vdgg_get_state_file)
   # Resolve from state so the allowlist survives vdgg_state_loop increments.
-  allowlist_file=$(grep '^task_allowlist_file=' "$(_vdgg_get_state_file)" | cut -d= -f2- || true)
+  allowlist_file=$(_vdgg_state_field task_allowlist_file "$state_file")
   [ -n "$allowlist_file" ] || allowlist_file=$(_vdgg_task_allowlist_file_for_id "$id" "$loop")
   # Derive the baseline dir from the stored base_ref so rollback survives
   # vdgg_state_loop increments; fall back to the current-loop derivation.
-  base_ref=$(grep '^task_base_ref=' "$(_vdgg_get_state_file)" | cut -d= -f2- || true)
+  base_ref=$(_vdgg_state_field task_base_ref "$state_file")
   if [ -n "$base_ref" ]; then
     baseline_dir="${base_ref/baseline-status-/baseline-}"
   else

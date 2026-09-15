@@ -4,6 +4,8 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
+  # This differs from the other three hooks: keep dependency enforcement and
+  # install guidance in pretool; this posttool fallback only exits successfully.
   # jq missing: do not block. Pretool surfaces the install hint when a tool call
   # actually requires hook enforcement.
   exit 0

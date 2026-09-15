@@ -6,6 +6,9 @@ set -euo pipefail
 INPUT=$(cat)
 
 if ! command -v jq >/dev/null 2>&1; then
+    # Keep jq install-command detection and guidance aligned across the Claude
+    # pretool/posttool and Codex pretool hooks. Their activation checks differ;
+    # Codex posttool intentionally exits 0 without jq and has no install guidance.
     # Without jq the hook JSON cannot be parsed properly. Best-effort: extract
     # cwd with grep/sed and check for an active VibesDeGoGo! session there. No
     # active session -> stay out of the way so unrelated repositories are never

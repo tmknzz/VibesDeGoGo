@@ -102,7 +102,7 @@ AUTO_PUSH=false
 
 `branch-pr` is the default:
 
-1. Step 1 creates a feature branch named from the Step 0 Goal, in `{type}/{slug}` form (e.g., `feat/japanese-readme`). See Step 1 in `SKILL.md`.
+1. Step 1 creates a feature branch named from the Step 0 Goal, in `{type}/{slug}` form (e.g., `feat/japanese-readme`). See Step 1 in `SKILL.md`. `{type}` and `{slug}` are placeholders the agent substitutes; they are not shell variables and are never expanded by the shell.
 2. Step 9 commits there.
 3. Step 9 pushes the branch and creates a PR.
 4. The agent stops. A human decides whether to merge.

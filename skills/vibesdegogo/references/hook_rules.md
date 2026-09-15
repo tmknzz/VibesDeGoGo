@@ -91,6 +91,11 @@ Search commands such as `rg`, `grep`, `find`, `sed`, `awk`, `jq`, `test`, and `[
 
 ## Review Gate (simplify or explicit review)
 
+This section is the authoritative specification of the enforced review gate.
+SKILL.md Step 7 provides the agent-facing review procedure and additional review
+obligations. Its requirements for reviewer perspectives and handling findings
+remain applicable; they are not all enforced by hooks.
+
 During `testing`, successful verification must be followed by a review pass.
 Two sentinels can satisfy the gate:
 
@@ -99,24 +104,108 @@ Two sentinels can satisfy the gate:
 .claude/.vdgg-review-sentinel-{vdgg_id}-{loop_count}     created by vdgg_review_run when the review command exits 0
 ```
 
-Fields (both sentinels):
+When both exist for the current id and loop, PreToolUse reads the simplify
+sentinel and ignores the review one.
+
+### Sentinel fields
+
+`_vdgg_render_sentinel_body` in `vdgg-state.sh` is the only writer of the field
+order and key names. Both sentinel kinds carry the same nine lines; a value that
+does not apply is written as an empty string rather than an omitted line:
 
 ```text
 started=1
 started_at=<UTC timestamp>
 modified=0|1
 modified_files=<comma-separated paths>
+review_output_hash=<sha256 of the review output, or empty>
+lens_count=<reviewer perspective count, or empty>
+countersign=none|clean|refuted
+schema_validated=0|1
+countersign_required=0|1
 ```
 
-Verified transition behavior:
+A sentinel whose last five fields are all absent or empty is classified `legacy`
+(written before those fields existed) and skips the Layer-4 invariants below.
 
-- no sentinel present: block verified transition,
-- `modified=0`: allow verified transition and delete the sentinels,
-- `modified=1`: block verified transition and require reflection plus re-test.
+### What vdgg_review_run checks
 
-PostToolUse flips `modified=1` on whichever sentinel exists when Edit/Write
-touches implementation files during `testing` (sidecar and `tasks/vdgg/` paths
-are excluded). Sentinels cannot be written directly; see Common Guards.
+`vdgg_review_run [--review-output <file>] [--] <command>` runs the command first
+and propagates its exit status on failure. A sentinel is written only after the
+command exits 0. Writing a sentinel is not the same as opening the gate: the
+verified conditions below are checked separately, at gate-read time.
+
+With `--review-output <file>`:
+
+- Layer 1 (`_vdgg_validate_review_output`) requires a JSON object with array
+  `coverage` and `findings`. Each coverage entry needs `file`, `hunk_start`,
+  `hunk_lines`, and `judgment` (`ok` or `finding`). Each finding needs `file`,
+  `line`, `severity` (`high`/`medium`/`low`), `summary`, `fix`, and `cost`
+  (`low`/`medium`/`high`). The coverage entries must also overlap every hunk of
+  the current diff.
+- Layer 2 (`_vdgg_validate_review_lens_count`) requires a top-level `lens_count`
+  of at least 3. A missing, non-numeric, or negative value sanitizes to 0 and
+  fails. This is a floor, not the Step 7 target: Step 7 asks for more
+  perspectives on a large or contract-changing diff, and no hook checks that.
+- The sentinel then records the output's sha256 as `review_output_hash`, the
+  sanitized `lens_count`, `schema_validated=1`, `countersign=none`, and
+  `countersign_required=0` when the primary review produced a high or medium
+  finding, `1` when it did not.
+
+Without `--review-output` (the legacy path), neither layer runs. The sentinel
+records `schema_validated=0`, an empty hash and lens_count, and
+`countersign_required=1`, so the gate stays closed until a countersign is
+recorded. The legacy path cannot reach verified on its own.
+
+### What the simplify sentinel records
+
+PostToolUse writes it when the `simplify` skill is invoked during `testing`,
+through the same renderer, with `review_output_hash` and `lens_count` empty,
+`countersign=none`, `schema_validated=0`, and `countersign_required=0`. No
+Layer 1 or Layer 2 check backs it. Simplify's own parallel angle finders supply
+the perspective diversity, and the hook records nothing about them, so SKILL.md
+Step 7's account of simplify describes agent behavior, not a hook check.
+
+### What vdgg_review_countersign changes
+
+`vdgg_review_countersign --original-output <a> --countersign-output <b> <command>`
+returns 0 without running the command when the original already holds a high or
+medium finding. Otherwise it runs the command, applies Layer 1 and Layer 2 to
+the countersign output, and returns 1 when the countersign surfaces a high or
+medium finding the original missed. On success it rewrites the sentinel with the
+original's hash and lens_count, `countersign=clean`, `schema_validated=1`, and
+`countersign_required=1` left as it was.
+
+### Verified transition behavior
+
+PreToolUse blocks a `vdgg_state_*` command that moves to `verified` unless all of
+the following hold:
+
+- when a task allowlist is armed and its file exists, the current loop's task
+  gate file exists (`vdgg_task_gate` succeeded),
+- a simplify or review sentinel exists for the current id and loop,
+- that sentinel's `modified` is not `1`,
+- `_vdgg_validate_sentinel_fields` accepts it: `schema_validated=1` requires a
+  non-empty `review_output_hash` and a non-zero `lens_count`;
+  `schema_validated=0` together with a non-zero `lens_count` is contradictory;
+  `countersign` must be one of `none`/`clean`/`refuted`; `countersign_required`
+  must be `0`, `1`, or empty,
+- `_vdgg_review_gate_ready` accepts it: `countersign_required=1` requires
+  `countersign=clean`.
+
+On success both sentinels are deleted so one review pass cannot satisfy a later
+loop. `modified=1` blocks the transition and requires reflection plus a re-test.
+PostToolUse sets `modified=1` on whichever sentinel exists when Edit/Write
+touches implementation files during `testing` (sidecar paths and
+`tasks/vdgg/{id}` are excluded). Sentinels cannot be written through tool calls;
+see Common Guards. `_vdgg_write_review_sentinel` additionally refuses any call
+that does not carry the one-shot `_VDGG_WRITE_REVIEW_SENTINEL_AUTHORIZED=1`
+breadcrumb, which closes the shortcut of calling the writer directly.
+
+Acting on the review's own findings — fixing the high and medium issues, judging
+what is genuinely out of scope — is the agent's obligation under SKILL.md Step 7.
+No hook checks it. A review whose findings were ignored still opens the gate as
+long as the fields above line up.
 
 ## Known Limits
 
@@ -124,3 +213,4 @@ are excluded). Sentinels cannot be written directly; see Common Guards.
 - The reflection gate compares whole-second file mtimes; if `progress.md` or `investigation-r*.md` is written in the same second as the state transition, the return to implementing can be blocked once — retrying a moment later succeeds.
 - The sidecar write guard matches the literal `.claude/.vdgg-` path in the Bash command text. A segment that hides the path behind a shell variable or command substitution (e.g. `D=.claude; rm -f "$D/.vdgg-active"`) can evade the match. The hook raises the cost of forgery but is a guardrail, not a security boundary; it does not sandbox a determined agent.
 - The entry gate's Bash write detection shares the same literal-match limits: interpreter one-liners (`python -c "open('f','w')"`), writes hidden behind shell variables, `>|` (noclobber overwrite, split away with `|` during segmenting), and a bare trailing `>` left at a segment end are not detected. It stops contract-ignoring drift (the observed failure mode), not a deliberately evasive agent.
+- Step 3 and Step 4 artifacts (`investigation-r*.md`, plan files under `tasks/vdgg/{id}/`) are not structurally validated by the hooks. What the hooks enforce is narrower: `requirements.md` must exist and carry a non-empty `## Lessons Applied` heading before Step 2 -> Step 3, and the reflection gate compares file mtimes. Everything else about those artifacts relies on the agent's own inspection.

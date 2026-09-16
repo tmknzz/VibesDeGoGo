@@ -15,9 +15,18 @@ are blocked outright. Bash commands are split into shell segments (on `&&`, `||`
 a **whitelist** (fail-closed): the segment is allowed only if it is a `git commit`
 (whose message may mention a sidecar path without writing it) or a genuine read —
 a leading read-only verb (`cat`, `grep`, `test`, `ls`, `head`, `tail`, …) with no
-output redirection or `tee`. Every other form — interpreters (`python`, `perl`),
-`dd`, `install`, `truncate`, redirects, file ops — is denied. Segmenting means a
-`git commit` cannot shield a sidecar-mutating segment in the same command line.
+output redirection or `tee`. A redirection to `/dev/null` writes nothing and so
+does not count (`2>/dev/null` silences stderr rather than writing the sidecar);
+it is stripped before the check rather than exempting the segment, so a segment
+that both silences stderr and writes still shows its `>` and stays denied. Only
+`/dev/null` is stripped here — the entry gate's carve-out also covers
+`/dev/stdout` and `/dev/stderr`, which is unsafe for this guard: the pattern has
+no terminator, so `>/dev/stdout/<sidecar>` would be swallowed whole, and on
+Linux `/dev/stdout` is `/proc/self/fd/1`, which `1<.` in the same segment makes
+resolve inside the repository. Every other form — interpreters (`python`,
+`perl`), `dd`, `install`, `truncate`, other redirects, file ops — is denied.
+Segmenting means a `git commit` cannot shield a sidecar-mutating segment in
+the same command line.
 
 This covers state files, the active marker, and the simplify/review sentinels —
 so the review gate cannot be satisfied by forging a sentinel. Use `vdgg_state_*`
@@ -212,5 +221,7 @@ long as the fields above line up.
 - The Stop hook depends on Claude Code providing `cwd` and `transcript_path` in hook JSON. If Claude Code changes that contract, the Stop hook may become a no-op rather than a blocker.
 - The reflection gate compares whole-second file mtimes; if `progress.md` or `investigation-r*.md` is written in the same second as the state transition, the return to implementing can be blocked once — retrying a moment later succeeds.
 - The sidecar write guard matches the literal `.claude/.vdgg-` path in the Bash command text. A segment that hides the path behind a shell variable or command substitution (e.g. `D=.claude; rm -f "$D/.vdgg-active"`) can evade the match. The hook raises the cost of forgery but is a guardrail, not a security boundary; it does not sandbox a determined agent.
+- The read whitelist is a leading-verb model, so read-only forms it does not name are denied: `sed -n '1,5p' <sidecar>`, `awk '{print}' <sidecar>`, and `for f in <sidecar>*; do …; done` are all blocked. `sed` and `awk` are left out deliberately (`sed -i`, and awk's `print > "file"`, write); `for` is extracted as the leading verb but is not on the list. The denial message names representative allowed verbs, so read such a file with `cat`/`head`/`grep` instead.
+- The redirect test looks for a redirect operator in the same segment, not at where the redirect points. A read that redirects its output to an ordinary file is therefore denied (`cat <sidecar> > /tmp/copy`), while the same read piped onward is allowed (`cat <sidecar> | tee /tmp/copy`), because the pipe starts a new segment that no longer mentions the sidecar. Neither form writes the sidecar; `cat x | tee <sidecar>` is still denied, since `tee` is not on the read list. Carving out more redirect targets is not the fix — see the `/dev/null` note under Common Guards.
 - The entry gate's Bash write detection shares the same literal-match limits: interpreter one-liners (`python -c "open('f','w')"`), writes hidden behind shell variables, `>|` (noclobber overwrite, split away with `|` during segmenting), and a bare trailing `>` left at a segment end are not detected. It stops contract-ignoring drift (the observed failure mode), not a deliberately evasive agent.
 - Step 3 and Step 4 artifacts (`investigation-r*.md`, plan files under `tasks/vdgg/{id}/`) are not structurally validated by the hooks. What the hooks enforce is narrower: `requirements.md` must exist and carry a non-empty `## Lessons Applied` heading before Step 2 -> Step 3, and the reflection gate compares file mtimes. Everything else about those artifacts relies on the agent's own inspection.

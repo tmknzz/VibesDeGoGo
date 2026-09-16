@@ -7,6 +7,7 @@ VibesDeGoGo! の改善にご協力ありがとうございます。本プロジ�
 ## 必要環境
 
 - `bash`
+- `zsh`（テストスイートは全テストを bash と zsh の両方で実行します）
 - `jq`
 - 標準 Unix ツール: `date`, `tr`, `grep`, `sed`, `find`, `awk`
 

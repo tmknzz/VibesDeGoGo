@@ -25,9 +25,10 @@ run_hook() {
     local json="$1"
     set +e
     printf '%s' "$json" | bash "$STOPHOOK" >/tmp/vdgg-test-stop.out 2>/tmp/vdgg-test-stop.err
-    local status=$?
+    # zsh: $status is a read-only alias for $?, so assigning to it aborts the function.
+    local rc=$?
     set -e
-    echo "$status"
+    echo "$rc"
 }
 
 write_state

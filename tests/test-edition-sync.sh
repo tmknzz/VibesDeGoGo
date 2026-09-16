@@ -11,15 +11,18 @@ CX="$ROOT/.agents/skills/vibesdegogo"
 # other is the drift this test exists to catch; sync the pair and re-run.
 # local-inference-setup.md is NOT in this list: each edition names its own
 # install path as the copy source, so the two diverge deliberately.
-PAIRS="
-scripts/vdgg-llm-start.sh
-scripts/vdgg-exec-claude.sh
-scripts/vdgg-exec-codex.sh
-references/servers-conf.md
-references/servers.conf.example
-"
+# An array, not a newline-separated string: zsh does not word-split an
+# unquoted parameter expansion, so `for rel in $PAIRS` would iterate once
+# over the whole blob there.
+PAIRS=(
+    scripts/vdgg-llm-start.sh
+    scripts/vdgg-exec-claude.sh
+    scripts/vdgg-exec-codex.sh
+    references/servers-conf.md
+    references/servers.conf.example
+)
 
-for rel in $PAIRS; do
+for rel in "${PAIRS[@]}"; do
     assert_file_exists "$CC/$rel" "Claude Code edition has $rel"
     assert_file_exists "$CX/$rel" "Codex edition has $rel"
     cmp -s "$CC/$rel" "$CX/$rel"

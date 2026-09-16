@@ -8,6 +8,7 @@ scripts, Markdown docs, and no test framework dependency.
 ## Requirements
 
 - `bash`
+- `zsh` (the test suite runs every test under both shells)
 - `jq`
 - standard Unix tools: `date`, `tr`, `grep`, `sed`, `find`, `awk`
 

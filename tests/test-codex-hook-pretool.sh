@@ -143,6 +143,33 @@ write_state investigating 3
 STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat .codex/.vdgg-state-test-id"}}')
 assert_exit_code 0 "$STATUS" "genuine sidecar read is allowed"
 
+# A read that silences stderr is still a read: `2>/dev/null` is not an output
+# redirection to the sidecar.
+write_state investigating 3
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat .codex/.vdgg-state-test-id 2>/dev/null"}}')
+assert_exit_code 0 "$STATUS" "sidecar read with 2>/dev/null is allowed"
+
+write_state investigating 3
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"head -5 .codex/.vdgg-state-test-id >/dev/null 2>&1"}}')
+assert_exit_code 0 "$STATUS" "sidecar read discarding all output is allowed"
+
+# ...but silencing stderr must not launder a real write in the same segment.
+write_state testing 7
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat /etc/hosts 2>/dev/null > .codex/.vdgg-review-sentinel-test-id-0"}}')
+assert_exit_code 2 "$STATUS" "2>/dev/null does not shield a sentinel write"
+
+# ...and the /dev carve-out stays narrow: only /dev/null is stripped. On Linux
+# /dev/stdout is /proc/self/fd/1, so `>/dev/stdout/<path>` with fd 1 pointed at a
+# directory resolves inside the repository. Widening the strip to cover it would
+# swallow the redirect whole and let this read as a plain read.
+write_state testing 7
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat forged.txt 1<. >/dev/stdout/.codex/.vdgg-review-sentinel-test-id-0"}}')
+assert_exit_code 2 "$STATUS" "/dev/stdout path traversal to a sentinel is blocked"
+
+write_state testing 7
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat forged.txt 2<. 2>/dev/stderr/.codex/.vdgg-review-sentinel-test-id-0"}}')
+assert_exit_code 2 "$STATUS" "/dev/stderr path traversal to a sentinel is blocked"
+
 # P1-CX-1: verified phase blocks code edits (arm was missing entirely).
 write_state verified 7
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/functions/index.js"}}')

@@ -269,13 +269,22 @@ if [ "$TOOL_NAME" = "Bash" ]; then
         _vdgg_read_ok=0
         case "$_vdgg_verb" in
             cat|grep|egrep|fgrep|test|'['|ls|head|tail|wc|diff|cmp|stat|od|hexdump|file|realpath|readlink)
-                if ! echo "$_vdgg_seg" | grep -qE '(>[^&]|>>|(^|[[:space:]])tee([[:space:]]|$))'; then
+                # Strip `2>/dev/null` before the redirect test: silencing stderr is
+                # not a write, and a segment that also writes keeps its `>`.
+                # SECURITY: /dev/null ONLY -- never widen to the entry gate's
+                # /dev/stdout|stderr. This pattern has no terminator, so
+                # `>/dev/stdout/<path>` would be swallowed whole, and fd 1 can be
+                # aimed into the repo with `1<.`. /dev/null is a character device,
+                # so `/dev/null/<x>` is always ENOTDIR.
+                # See skills/vibesdegogo/references/hook_rules.md.
+                _vdgg_seg_checked=$(printf '%s' "$_vdgg_seg" | sed -E 's#[0-9]*>>?[[:space:]]*/dev/null##g')
+                if ! echo "$_vdgg_seg_checked" | grep -qE '(>[^&]|>>|(^|[[:space:]])tee([[:space:]]|$))'; then
                     _vdgg_read_ok=1
                 fi
                 ;;
         esac
         if [ "$_vdgg_read_ok" -ne 1 ]; then
-            echo "VibesDeGoGo! [${VDGG_ID}]: Direct writes to VibesDeGoGo! sidecar files are blocked. Use vdgg_state_* helpers." >&2
+            echo "VibesDeGoGo! [${VDGG_ID}]: Direct writes to VibesDeGoGo! sidecar files are blocked. Use vdgg_state_* helpers. To read one, lead with a read-only verb such as cat/grep/head and add no output redirection (only /dev/null is exempt)." >&2
             exit 2
         fi
     done <<< "$_vdgg_segs"

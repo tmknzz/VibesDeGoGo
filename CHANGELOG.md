@@ -11,6 +11,12 @@ grouped by edition. Their histories are merged into this repository.
 
 ### Added
 
+- Optional plan review seat `4R` in Formations (both editions; proposal item
+  5). A Formation that names an external AI on `4R` has it review the Step 4
+  plan into `tasks/vdgg/{id}/plan-review.md`, and the Step 4 -> 5 hook
+  refuses to leave planning until that file exists. `4R` is outside the `*`
+  wildcard, so Formations that do not list it are unchanged.
+
 - Evidence gates (both editions; docs/proposals/2026-09-24-evidence-gates.md
   items 1-4 and 7). Gates now check evidence of the work, not the shape of
   the artifacts:

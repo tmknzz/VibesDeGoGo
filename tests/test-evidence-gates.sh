@@ -513,8 +513,29 @@ write_state investigating 3
 set +e
 printf '%s' "$(bash_json 'cat src/app.sh')" | bash "$H/vdgg-hook-pretool.sh" >/dev/null 2>&1
 RC=$?
-set -e 2>/dev/null || true
 assert_exit_code 2 "$RC" "a hook missing vdgg-evidence.sh fails closed"
 rm -rf "$H"
+
+# ---------------------------------------------- 5. plan review seat (4R)
+. "$ROOT/tests/lib/exec-fixtures.sh"
+export VDGG_CONFIG_DIR="$T/user-config"
+vdgg_install_exec_fixtures "$T/bin" "$VDGG_CONFIG_DIR"
+mkdir -p "$VDGG_CONFIG_DIR/formations"
+printf '4: primary\n4R: okexec\n' > "$VDGG_CONFIG_DIR/formations/with4r.conf"
+printf '*: okexec\n' > "$VDGG_CONFIG_DIR/formations/wild.conf"
+PLAN_OK_TODO="$(cat "$TASKS/todo.md" 2>/dev/null)"
+write_state planning 4
+sed -i.bak 's/^formation=.*//' "$T/.claude/.vdgg-state-test-id" && rm -f "$T/.claude/.vdgg-state-test-id.bak"
+printf 'formation=with4r\n' >> "$T/.claude/.vdgg-state-test-id"
+printf 'progress\n' > "$TASKS/progress.md"
+rm -f "$TASKS/plan-review.md"
+assert_exit_code 2 "$(run_hook "$(bash_json "$ADV5")")" "5: a Formation with 4R blocks Step 5 until plan-review.md exists"
+assert_contains "$(cat "$T/hook.err")" "4R" "5: the refusal names seat 4R"
+printf '## Findings\n- none\n' > "$TASKS/plan-review.md"
+assert_exit_code 0 "$(run_hook "$(bash_json "$ADV5")")" "5: the plan review opens Step 5"
+rm -f "$TASKS/plan-review.md"
+sed -i.bak 's/^formation=.*/formation=wild/' "$T/.claude/.vdgg-state-test-id" && rm -f "$T/.claude/.vdgg-state-test-id.bak"
+assert_exit_code 0 "$(run_hook "$(bash_json "$ADV5")")" "5: the * wildcard does not assign 4R"
+unset VDGG_CONFIG_DIR
 
 echo "evidence gates: all checks passed"

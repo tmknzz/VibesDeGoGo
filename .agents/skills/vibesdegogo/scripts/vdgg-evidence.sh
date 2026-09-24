@@ -551,6 +551,24 @@ _vdgg_ev_check_plan() {
     ' "$todo"
 }
 
+# Step 4 -> 5, optional plan review (seat 4R). When the session's Formation
+# assigns seat 4R to an external AI, its review of the plan
+# (tasks/vdgg/<id>/plan-review.md) must exist before a task is selected.
+# Formations without 4R, or with 4R inline, are not affected. Needs the
+# Formation helpers of vdgg-state.sh. Prints the problem and returns 1.
+_vdgg_ev_check_plan_review() {
+    local tasks_dir="$1" formation="$2" ai
+    [ -n "$formation" ] || return 0
+    if ! ai=$(vdgg_formation_resolve STEP_4R_AI "$formation" 2>&1); then
+        printf 'Formation %s cannot be resolved: %s\n' "$formation" "$ai"
+        return 1
+    fi
+    [ "$ai" = "inline" ] && return 0
+    [ -s "$tasks_dir/plan-review.md" ] && return 0
+    printf 'Formation %s assigns the plan review seat 4R to %s: run vdgg_executor_run STEP_4R_AI <input> %s/plan-review.md and address its findings before Step 5\n' "$formation" "$ai" "$tasks_dir"
+    return 1
+}
+
 # --- Step 6: patch chain -----------------------------------------------------
 
 # Hash one snapshot entry: a symlink records its target, a file its blob id.

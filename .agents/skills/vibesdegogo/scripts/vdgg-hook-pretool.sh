@@ -350,6 +350,19 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "planning" ]; then
       block "todo.md does not carry plan evidence. Each '## T<n>' task needs '### Location', '### Excerpt' (the current code there, copied verbatim in one fenced block, or 新規 for a new file) and '### Intent' (prose, no code): $(printf '%s' "$PLAN_PROBLEMS" | tr '\n' ';')"
     fi
     [ -f "$TASKS_DIR/progress.md" ] || block "progress.md is required before Step 5."
+    # Plan review seat 4R: only when the session's Formation names an
+    # external AI there (needs the Formation helpers).
+    FORMATION=$(_vdgg_state_get formation "$STATE_FILE")
+    if [ -n "$FORMATION" ]; then
+      VDGG_CWD="$CWD"
+      VDGG_STATE_DIR="$CWD/.codex"
+      VDGG_TASKS_DIR="$CWD/tasks/vdgg"
+      # shellcheck source=vdgg-state.sh
+      . "${_VDGG_CX_HOOK_DIR}/vdgg-state.sh"
+      if ! REVIEW_PROBLEMS=$(_vdgg_ev_check_plan_review "$TASKS_DIR" "$FORMATION"); then
+        block "$REVIEW_PROBLEMS"
+      fi
+    fi
   fi
 fi
 

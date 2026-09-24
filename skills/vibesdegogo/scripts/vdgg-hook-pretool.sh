@@ -556,6 +556,20 @@ case "$PHASE" in
                     echo "VibesDeGoGo! Step ${STEP} (planning) [${VDGG_ID}]: progress.md is required before Step 5." >&2
                     exit 2
                 fi
+                # Plan review seat 4R: only when the session's Formation
+                # names an external AI there (needs the Formation helpers).
+                FORMATION=$(_vdgg_state_get formation "$STATE_FILE")
+                if [ -n "$FORMATION" ]; then
+                    VDGG_CWD="$CWD"
+                    VDGG_STATE_DIR="$CWD/.claude"
+                    VDGG_TASKS_DIR="$CWD/tasks/vdgg"
+                    # shellcheck source=vdgg-state.sh
+                    . "${_VDGG_HOOK_DIR}/vdgg-state.sh"
+                    if ! REVIEW_PROBLEMS=$(_vdgg_ev_check_plan_review "$TASKS_DIR" "$FORMATION"); then
+                        echo "VibesDeGoGo! Step ${STEP} (planning) [${VDGG_ID}]: ${REVIEW_PROBLEMS}" >&2
+                        exit 2
+                    fi
+                fi
             fi
         fi
         ;;

@@ -205,4 +205,26 @@ R=$(mktemp -d)
 ) || fail "codex 3b: state helper checks aborted"
 rm -rf "$R"
 
+# ---------------------------------------------- 5. plan review seat (4R)
+. "$ROOT/tests/lib/exec-fixtures.sh"
+export VDGG_CONFIG_DIR="$T/user-config"
+vdgg_install_exec_fixtures "$T/bin" "$VDGG_CONFIG_DIR"
+mkdir -p "$VDGG_CONFIG_DIR/formations"
+printf '4: primary\n4R: okexec\n' > "$VDGG_CONFIG_DIR/formations/with4r.conf"
+printf '*: okexec\n' > "$VDGG_CONFIG_DIR/formations/wild.conf"
+PLAN_OK_TODO="$(cat "$TASKS/todo.md" 2>/dev/null)"
+write_state planning 4
+sed -i.bak 's/^formation=.*//' "$T/.codex/.vdgg-state-test-id" && rm -f "$T/.codex/.vdgg-state-test-id.bak"
+printf 'formation=with4r\n' >> "$T/.codex/.vdgg-state-test-id"
+printf 'progress\n' > "$TASKS/progress.md"
+rm -f "$TASKS/plan-review.md"
+assert_exit_code 2 "$(run_hook "$(bash_json "$ADV5")")" "codex 5: a Formation with 4R blocks Step 5 until plan-review.md exists"
+assert_contains "$(cat "$T/hook.err")" "4R" "codex 5: the refusal names seat 4R"
+printf '## Findings\n- none\n' > "$TASKS/plan-review.md"
+assert_exit_code 0 "$(run_hook "$(bash_json "$ADV5")")" "codex 5: the plan review opens Step 5"
+rm -f "$TASKS/plan-review.md"
+sed -i.bak 's/^formation=.*/formation=wild/' "$T/.codex/.vdgg-state-test-id" && rm -f "$T/.codex/.vdgg-state-test-id.bak"
+assert_exit_code 0 "$(run_hook "$(bash_json "$ADV5")")" "codex 5: the * wildcard does not assign 4R"
+unset VDGG_CONFIG_DIR
+
 echo "codex evidence gates: all checks passed"

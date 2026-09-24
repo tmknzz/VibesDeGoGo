@@ -348,7 +348,7 @@ _vdgg_is_sidecar_path() {
 
 _vdgg_formation_keys() {
   printf '%s\n' \
-    STEP_0_AI STEP_1_AI STEP_2_AI STEP_3_AI STEP_4_AI STEP_5_AI \
+    STEP_0_AI STEP_1_AI STEP_2_AI STEP_3_AI STEP_4_AI STEP_4R_AI STEP_5_AI \
     STEP_6_AI STEP_6R_AI STEP_7_AI STEP_8_AI STEP_9_AI STEP_0_GRILL_AI \
     MAGI_MELCHIOR_AI MAGI_BALTHASAR_AI MAGI_CASPER_AI
 }
@@ -359,7 +359,7 @@ _vdgg_name_is_safe() {
 
 _vdgg_step_key_is_valid() {
   case "$1" in
-    STEP_0_AI|STEP_1_AI|STEP_2_AI|STEP_3_AI|STEP_4_AI|STEP_5_AI|STEP_6_AI|STEP_6R_AI|STEP_7_AI|STEP_8_AI|STEP_9_AI|STEP_0_GRILL_AI) return 0 ;;
+    STEP_0_AI|STEP_1_AI|STEP_2_AI|STEP_3_AI|STEP_4_AI|STEP_4R_AI|STEP_5_AI|STEP_6_AI|STEP_6R_AI|STEP_7_AI|STEP_8_AI|STEP_9_AI|STEP_0_GRILL_AI) return 0 ;;
     MAGI_MELCHIOR_AI|MAGI_BALTHASAR_AI|MAGI_CASPER_AI) return 0 ;;
     *) return 1 ;;
   esac
@@ -389,6 +389,9 @@ _vdgg_seat_to_key() {
     2) echo STEP_2_AI ;;
     3) echo STEP_3_AI ;;
     4) echo STEP_4_AI ;;
+    # 4R: optional plan review by another model. Outside the "*" wildcard,
+    # so it runs only in Formations that name it.
+    4R|4r) echo STEP_4R_AI ;;
     5) echo STEP_5_AI ;;
     6) echo STEP_6_AI ;;
     6R|6r) echo STEP_6R_AI ;;
@@ -598,7 +601,7 @@ _vdgg_validate_formation_file() {
       key="*"
     else
       key=$(_vdgg_seat_to_key "$seat") || {
-        echo "vdgg-formation: unknown seat in $file: $seat (valid: 0, 0G, 1, 2, 3, 4, 5, 6, 6R, 7, 8, 9, MAGI-M, MAGI-B, MAGI-C, *)" >&2
+        echo "vdgg-formation: unknown seat in $file: $seat (valid: 0, 0G, 1, 2, 3, 4, 4R, 5, 6, 6R, 7, 8, 9, MAGI-M, MAGI-B, MAGI-C, *)" >&2
         return 1
       }
     fi

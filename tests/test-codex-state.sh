@@ -467,6 +467,8 @@ vdgg_task_begin "TB: scope probe" functions/index.js >/dev/null 2>&1
 vdgg_state_advance 6 implementing >/dev/null 2>&1
 vdgg_state_loop 6 implementing >/dev/null 2>&1
 vdgg_state_advance 7 testing >/dev/null 2>&1
+# Real flow: testing -> verified -> progress (verified cannot be skipped).
+vdgg_state_advance 7 verified >/dev/null 2>&1
 vdgg_state_advance 8 progress >/dev/null 2>&1
 vdgg_state_advance 5 task-selected >/dev/null 2>&1
 LOOP_COUNT=$(grep '^loop_count=' ".codex/.vdgg-state-${IDB}" | cut -d= -f2)
@@ -505,6 +507,8 @@ assert_eq "functions/index.js" "$REARM_ALLOWLIST_CONTENT" "Codex blocked re-arm 
 REARM_STEP=$(grep '^step=' ".codex/.vdgg-state-${IDRA}" | cut -d= -f2)
 assert_eq "6" "$REARM_STEP" "Codex blocked re-arm leaves state untouched"
 vdgg_state_advance 7 testing >/dev/null 2>&1
+# Real flow: testing -> verified -> progress (verified cannot be skipped).
+vdgg_state_advance 7 verified >/dev/null 2>&1
 vdgg_state_advance 8 progress >/dev/null 2>&1
 vdgg_task_begin "TA: widened via 8->5" functions/index.js functions/new.js \
     >/tmp/vdgg-test-codex-rearm-ok.out 2>/tmp/vdgg-test-codex-rearm-ok.err

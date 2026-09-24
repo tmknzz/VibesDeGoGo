@@ -137,6 +137,10 @@ STATE_FILE="$CWD/.codex/.vdgg-state-${VDGG_ID}"
 
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
+# Transition gates match `vdgg_state_* <step> <phase>` literally; quoting an
+# argument ("4" planning) must not step around them. apply_patch bodies keep
+# COMMAND as is, so only the gate copy is unquoted.
+GATE_COMMAND=$(printf '%s' "$COMMAND" | tr -d "\"'")
 # 状態ファイルから 1 フィールドを読む。値に `=` を含みうるので常に f2- を使う。
 _vdgg_state_get() {
   grep "^$1=" "$2" | head -1 | cut -d= -f2- || true
@@ -154,6 +158,22 @@ block() {
   echo "VibesDeGoGo! for Codex [${VDGG_ID}]: $1" >&2
   exit 2
 }
+
+# Evidence gates shared with the Claude Code edition (vdgg-evidence.sh, kept
+# byte-identical): the Step 3 read log, the Step 4 plan excerpts, the Step 6
+# patch chain and the Step 7 plan reconciliation.
+_VDGG_CX_HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
+# A partial install must not quietly open the gates.
+[ -f "${_VDGG_CX_HOOK_DIR}/vdgg-evidence.sh" ] || block "vdgg-evidence.sh is missing next to the hook; reinstall the skill."
+# shellcheck source=vdgg-evidence.sh
+. "${_VDGG_CX_HOOK_DIR}/vdgg-evidence.sh"
+READ_LOG="$CWD/.codex/.vdgg-read-${VDGG_ID}"
+
+# A transition whose step/phase is not literal (a variable, $'...', a
+# backslash) cannot be judged against the gates, so it is refused.
+if [ "$TOOL_NAME" = "Bash" ] && ! _vdgg_ev_transitions_literal "$COMMAND"; then
+  block "write vdgg_state_advance/loop/write with a literal step and phase (e.g. vdgg_state_advance 4 planning); variables, escapes and \$'...' cannot be checked against the gates."
+fi
 
 # Portable mtime in epoch seconds. BSD/macOS `stat -f %m` gives the epoch. On
 # GNU/Linux `-f` means --file-system and prints non-numeric text with exit 0, so
@@ -276,7 +296,7 @@ if [ "$TOOL_NAME" = "apply_patch" ] || [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAM
 fi
 
 if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "requirements" ]; then
-  if printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+3[[:space:]]+investigating'; then
+  if printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+3[[:space:]]+investigating'; then
     [ -f "$TASKS_DIR/requirements.md" ] || block "requirements.md is required before investigation."
     # The '## Lessons Applied' heading with a non-empty body is enforced at the
     # earliest structural point where user-memory / AIB lessons still shape the
@@ -292,7 +312,7 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "requirements" ]; then
 fi
 
 if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "investigating" ]; then
-  if printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning'; then
+  if printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning'; then
     [ -f "$TASKS_DIR/investigation.md" ] || block "investigation.md is required before planning."
     # Seven direct pattern-action blocks mirror the Step 2->3 gate style above.
     # Adding or renaming a heading requires editing this block and SKILL.md's
@@ -313,6 +333,23 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "investigating" ]; then
       END { for (i = 1; i <= 7; i++) if (!seen[i] || !body[i]) exit 1 }
     ' "$TASKS_DIR/investigation.md" \
       || block "investigation.md must include all seven required Step 3 headings each with a non-empty body (see SKILL.md Step 3)."
+    # Read evidence: every file under '## 1. Related files' must exist and
+    # have been read (by a Bash reader) during this phase.
+    if ! READ_PROBLEMS=$(_vdgg_ev_check_related "$TASKS_DIR/investigation.md" "$READ_LOG" "$CWD"); then
+      block "Step 3 read evidence is missing. Every file listed under '## 1. Related files' must exist and be read during investigating (cat, sed -n, head, rg ...): $(printf '%s' "$READ_PROBLEMS" | tr '\n' ';')"
+    fi
+  fi
+fi
+
+# Plan evidence: leaving Step 4 (vdgg_state_advance 5, or vdgg_task_begin,
+# which also writes step 5) needs todo.md tasks whose excerpts match the
+# current code verbatim and whose intent carries no code.
+if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "planning" ]; then
+  if printf '%s' "$GATE_COMMAND" | grep -qE '(vdgg_state_(advance|loop|write)[[:space:]]+5[[:space:]]+task-selected|vdgg_task_begin)([^[:alnum:]_-]|$)'; then
+    if ! PLAN_PROBLEMS=$(_vdgg_ev_check_plan "$TASKS_DIR/todo.md" "$CWD"); then
+      block "todo.md does not carry plan evidence. Each '## T<n>' task needs '### Location', '### Excerpt' (the current code there, copied verbatim in one fenced block, or 新規 for a new file) and '### Intent' (prose, no code): $(printf '%s' "$PLAN_PROBLEMS" | tr '\n' ';')"
+    fi
+    [ -f "$TASKS_DIR/progress.md" ] || block "progress.md is required before Step 5."
   fi
 fi
 
@@ -347,6 +384,11 @@ case "$PHASE" in
         [ -n "$file_path" ] || continue
         # Task notes under tasks/vdgg/{id}/ stay editable without allowlisting.
         path_is_tasks_file "$file_path" && continue
+        # Step 6 is patch first: implementation files change only through
+        # vdgg_patch_apply / vdgg_codemod_apply, which the 6 -> 7 gate below
+        # checks. Testing refuses direct edits too: a review fix goes through
+        # reflection and the next loop's patch.
+        block "Review fixes too go through reflection and a patch. Step 6 is patch first: write the change as a unified diff under tasks/vdgg/${VDGG_ID}/patch/ and apply it with vdgg_patch_apply <file> (mechanical bulk edits: vdgg_codemod_apply <expected-files> <command>)."
         [ -n "${TASK_ALLOWLIST_FILE:-}" ] && [ -f "$TASK_ALLOWLIST_FILE" ] \
           || block "No active task allowlist. Run vdgg_task_begin before editing implementation files."
         path_is_task_allowlisted "$file_path" \
@@ -356,15 +398,30 @@ case "$PHASE" in
     if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$COMMAND" | grep -qE "$GIT_COMMIT_PATTERN"; then
       block "Commit is blocked before Step 9."
     fi
+    # Patch evidence: 6 -> 7 needs at least one vdgg_patch_apply or
+    # vdgg_codemod_apply for this task, and the allowlisted files must still
+    # hold exactly what the last one left.
+    if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "implementing" ] \
+      && printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+7[[:space:]]+testing([^[:alnum:]_-]|$)'; then
+      if ! CHAIN_PROBLEMS=$(_vdgg_ev_chain_check "$CWD/.codex/.vdgg-task-patchchain-${VDGG_ID}" "${TASK_ALLOWLIST_FILE:-}" "$CWD"); then
+        block "Step 6 patch evidence is missing: ${CHAIN_PROBLEMS}. Apply changes with vdgg_patch_apply (or vdgg_codemod_apply); after an out-of-band edit, vdgg_task_rollback and re-apply it as a patch."
+      fi
+    fi
     # A failed test must go through reflection before more implementation.
     if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "testing" ] \
-      && printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+[0-9]+[[:space:]]+implementing'; then
+      && printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+[0-9]+[[:space:]]+implementing'; then
       block "A failed test must go through reflection (Step 6-R) before returning to implementing."
     fi
     if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "testing" ]; then
-      if printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
+      if printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
         if [ -n "${TASK_ALLOWLIST_FILE:-}" ] && [ -f "$TASK_ALLOWLIST_FILE" ]; then
           [ -f "$TASK_GATE_FILE" ] || block "Run vdgg_task_gate successfully before verified."
+        fi
+        # Plan reconciliation: a task from todo.md needs a record in
+        # progress.md of how the diff compares with its plan (vdgg_plan_diff).
+        # Discrepancies are allowed; silence is not.
+        if ! RECON_PROBLEMS=$(_vdgg_ev_check_reconciliation "$TASKS_DIR/todo.md" "$TASKS_DIR/progress.md" "$(_vdgg_state_get current_task "$STATE_FILE")"); then
+          block "$RECON_PROBLEMS"
         fi
         REVIEW_FILE="$CWD/.codex/.vdgg-review-sentinel-${VDGG_ID}-${LOOP_COUNT}"
         [ -f "$REVIEW_FILE" ] || block "Run the Codex review gate with vdgg_review_run before verified."
@@ -400,7 +457,7 @@ case "$PHASE" in
       done < <(changed_files)
     fi
     # verified is only reachable from testing after review, never from reflection.
-    if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
+    if [ "$TOOL_NAME" = "Bash" ] && printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
       block "verified is only reachable from testing after review, not from reflection."
     fi
     # Returning to implementing requires a fresh retry investigation: both
@@ -409,7 +466,7 @@ case "$PHASE" in
     # analysis of the failure. Known limit: seconds-precision mtime can tie if a
     # file is written in the same second the state was last written.
     if [ "$TOOL_NAME" = "Bash" ] \
-      && printf '%s' "$COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
+      && printf '%s' "$GATE_COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
       RETRY_INVESTIGATION_FILE="$TASKS_DIR/investigation-r${LOOP_COUNT}.md"
       PROGRESS_FILE="$TASKS_DIR/progress.md"
       [ -f "$RETRY_INVESTIGATION_FILE" ] || block "Write a retry investigation (investigation-r${LOOP_COUNT}.md) before returning to implementing."
@@ -451,7 +508,7 @@ case "$PHASE" in
         fi
         CURBR=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
         BB_RE=$(printf '%s' "$BB" | sed 's/[^[:alnum:]]/\\&/g')
-        if printf '%s' "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([[:space:]]|$)'; then
+        if printf '%s' "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([^[:alnum:]_-]|$)'; then
           if [ "$CURBR" = "$BB" ]; then
             block "branch-pr workflow requires committing/pushing a feature branch and opening a PR, not the base branch."
           fi
@@ -472,5 +529,13 @@ case "$PHASE" in
     fi
     ;;
 esac
+
+# Step 3 read evidence: while investigating, append the files a Bash reader
+# (cat, sed -n, head, rg, ...) names to the read log, once no guard refused the
+# command. Codex hands the hook no Read tool, so Bash is the only source.
+# Recording never refuses a call.
+if [ "$TOOL_NAME" = "Bash" ] && [ "$PHASE" = "investigating" ]; then
+  _vdgg_ev_bash_read_paths "$COMMAND" | _vdgg_ev_record_reads "$READ_LOG" "$CWD" || true
+fi
 
 exit 0

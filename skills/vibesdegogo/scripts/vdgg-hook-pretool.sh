@@ -259,7 +259,44 @@ _vdgg_is_task_note() {
     return 1
 }
 
+# Evidence gates shared with the Codex edition (vdgg-evidence.sh, kept
+# byte-identical): the Step 3 read log, the Step 4 plan excerpts, the Step 6
+# patch chain and the Step 7 plan reconciliation. Loaded only by the branches
+# that use it.
+_VDGG_HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)
+# A partial install must not quietly open the gates.
+if [ ! -f "${_VDGG_HOOK_DIR}/vdgg-evidence.sh" ]; then
+    echo "VibesDeGoGo! [${VDGG_ID}]: vdgg-evidence.sh is missing next to the hook; reinstall the skill." >&2
+    exit 2
+fi
+_vdgg_load_evidence() {
+    # shellcheck source=vdgg-evidence.sh
+    . "${_VDGG_HOOK_DIR}/vdgg-evidence.sh"
+}
+READ_LOG="$CWD/.claude/.vdgg-read-${VDGG_ID}"
+
+# Step 3 read evidence: while investigating, append every path the agent
+# reads to the read log: here the Read/Grep/Glob/LS/NotebookRead targets
+# (these tools exit just below), and at the end of this hook the files a Bash
+# reader such as cat, sed -n, head or rg names, once no guard refused the
+# command. The Step 3 -> 4 gate compares '## 1. Related files' against it.
+# Recording never refuses a tool call.
+if [ "$PHASE" = "investigating" ]; then
+    _vdgg_load_evidence
+    case "$TOOL_NAME" in
+        Read|NotebookRead)
+            echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' \
+                | _vdgg_ev_record_reads "$READ_LOG" "$CWD" || true
+            ;;
+        Grep|Glob|LS)
+            echo "$INPUT" | jq -r '.tool_input.path // empty' \
+                | _vdgg_ev_record_reads "$READ_LOG" "$CWD" || true
+            ;;
+    esac
+fi
+
 # Extract only the fields needed for the current tool type.
+GATE_COMMAND=""
 
 case "$TOOL_NAME" in
     Edit|Write|NotebookEdit)
@@ -267,6 +304,19 @@ case "$TOOL_NAME" in
         ;;
     Bash)
         COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+        # Transition gates match `vdgg_state_* <step> <phase>` literally;
+        # quoting an argument ("4" planning) must not step around them, so
+        # they match an unquoted copy. COMMAND itself stays as typed.
+        GATE_COMMAND=$(printf '%s' "$COMMAND" | tr -d "\"'")
+        # Anything else in that position (a variable, $'...', a backslash)
+        # cannot be judged, so it is refused rather than let through.
+        if [ -f "${_VDGG_HOOK_DIR}/vdgg-evidence.sh" ]; then
+            _vdgg_load_evidence
+            if ! _vdgg_ev_transitions_literal "$COMMAND"; then
+                echo "VibesDeGoGo! [${VDGG_ID}]: write vdgg_state_advance/loop/write with a literal step and phase (e.g. vdgg_state_advance 4 planning); variables, escapes and \$'...' cannot be checked against the gates." >&2
+                exit 2
+            fi
+        fi
         ;;
     Agent)
         # Agent calls are phase-gated below.
@@ -413,7 +463,7 @@ case "$PHASE" in
         # session can never skip consulting user-memory / AIB lessons at the
         # earliest structural point where they still shape the requirements.
         if [ "$PHASE" = "requirements" ] && [ "$TOOL_NAME" = "Bash" ]; then
-            if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+3[[:space:]]+investigating([[:space:]]|$)'; then
+            if echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+3[[:space:]]+investigating([^[:alnum:]_-]|$)'; then
                 REQ_FILE="${TASKS_DIR}/requirements.md"
                 if [ ! -f "$REQ_FILE" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (requirements) [${VDGG_ID}]: requirements.md is required before investigation." >&2
@@ -449,7 +499,7 @@ case "$PHASE" in
         # The seven headings are the canonical Step 3 output contract defined in
         # references/subagent_prompts.md.
         if [ "$PHASE" = "investigating" ] && [ "$TOOL_NAME" = "Bash" ]; then
-            if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning([[:space:]]|$)'; then
+            if echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+4[[:space:]]+planning([^[:alnum:]_-]|$)'; then
                 INV_FILE="${TASKS_DIR}/investigation.md"
                 if [ ! -f "$INV_FILE" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md is required before planning." >&2
@@ -475,6 +525,37 @@ case "$PHASE" in
                     echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: investigation.md must include all seven required Step 3 headings each with a non-empty body (see SKILL.md Step 3 or references/subagent_prompts.md)." >&2
                     exit 2
                 fi
+                # Read evidence: every file under '## 1. Related files' must
+                # exist and have been read during this phase (see the read log
+                # above). Headings alone can be written without opening a file.
+                _vdgg_load_evidence
+                if ! READ_PROBLEMS=$(_vdgg_ev_check_related "$INV_FILE" "$READ_LOG" "$CWD"); then
+                    {
+                        echo "VibesDeGoGo! Step ${STEP} (investigating) [${VDGG_ID}]: Step 3 read evidence is missing. Every file listed under '## 1. Related files' must exist and be read during investigating (Read/Grep, or cat, sed -n, head, rg in Bash):"
+                        printf '%s\n' "$READ_PROBLEMS" | sed 's/^/  - /'
+                    } >&2
+                    exit 2
+                fi
+            fi
+        fi
+        # Plan evidence: leaving Step 4 (vdgg_state_advance 5, or
+        # vdgg_task_begin, which also writes step 5) needs todo.md tasks whose
+        # excerpts match the current code verbatim and whose intent carries
+        # no code. progress.md must exist as before.
+        if [ "$PHASE" = "planning" ] && [ "$TOOL_NAME" = "Bash" ]; then
+            if echo "$GATE_COMMAND" | grep -qE '(vdgg_state_(advance|loop|write)[[:space:]]+5[[:space:]]+task-selected|vdgg_task_begin)([^[:alnum:]_-]|$)'; then
+                _vdgg_load_evidence
+                if ! PLAN_PROBLEMS=$(_vdgg_ev_check_plan "${TASKS_DIR}/todo.md" "$CWD"); then
+                    {
+                        echo "VibesDeGoGo! Step ${STEP} (planning) [${VDGG_ID}]: todo.md does not carry plan evidence. Each '## T<n>' task needs '### Location', '### Excerpt' (the current code there, copied verbatim in one fenced block, or 新規 for a new file) and '### Intent' (prose, no code):"
+                        printf '%s\n' "$PLAN_PROBLEMS" | sed 's/^/  - /'
+                    } >&2
+                    exit 2
+                fi
+                if [ ! -f "${TASKS_DIR}/progress.md" ]; then
+                    echo "VibesDeGoGo! Step ${STEP} (planning) [${VDGG_ID}]: progress.md is required before Step 5." >&2
+                    exit 2
+                fi
             fi
         fi
         ;;
@@ -492,6 +573,15 @@ case "$PHASE" in
         # vdgg_task_begin. Task notes under tasks/vdgg/{id}/ stay editable.
         if [ -n "${FILE_PATH:-}" ]; then
             if [ -n "$FILE_PATH" ] && ! _vdgg_is_task_note "$FILE_PATH"; then
+                # Step 6 is patch first: implementation files change only
+                # through vdgg_patch_apply / vdgg_codemod_apply, which the
+                # 6 -> 7 gate below checks. Testing refuses direct edits too:
+                # a review fix goes through reflection and the next loop's
+                # patch, so no code enters the tree without one.
+                if [ "$PHASE" = "implementing" ] || [ "$PHASE" = "testing" ]; then
+                    echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: Review fixes too go through reflection and a patch. Step 6 is patch first: write the change as a unified diff under tasks/vdgg/${VDGG_ID}/patch/ and apply it with vdgg_patch_apply <file> (mechanical bulk edits: vdgg_codemod_apply <expected-files> <command>)." >&2
+                    exit 2
+                fi
                 if [ -z "$TASK_ALLOWLIST_FILE" ] || [ ! -f "$TASK_ALLOWLIST_FILE" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: No active task allowlist. Run vdgg_task_begin before editing implementation files." >&2
                     exit 2
@@ -509,18 +599,36 @@ case "$PHASE" in
                 echo "VibesDeGoGo! [${VDGG_ID:-unknown}]: Tool call blocked by VibesDeGoGo! hook." >&2
                 exit 2
             fi
+            # Patch evidence: 6 -> 7 needs at least one vdgg_patch_apply or
+            # vdgg_codemod_apply for this task, and the allowlisted files must
+            # still hold exactly what the last one left.
+            if [ "$PHASE" = "implementing" ] && echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+7[[:space:]]+testing([^[:alnum:]_-]|$)'; then
+                _vdgg_load_evidence
+                if ! CHAIN_PROBLEMS=$(_vdgg_ev_chain_check "$CWD/.claude/.vdgg-task-patchchain-${VDGG_ID}" "$TASK_ALLOWLIST_FILE" "$CWD"); then
+                    echo "VibesDeGoGo! Step ${STEP} (implementing) [${VDGG_ID}]: Step 6 patch evidence is missing: ${CHAIN_PROBLEMS}. Apply changes with vdgg_patch_apply (or vdgg_codemod_apply); after an out-of-band edit, vdgg_task_rollback and re-apply it as a patch." >&2
+                    exit 2
+                fi
+            fi
             # A failed test must go through reflection before more implementation.
-            if [ "$PHASE" = "testing" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+[0-9]+[[:space:]]+implementing'; then
+            if [ "$PHASE" = "testing" ] && echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+[0-9]+[[:space:]]+implementing'; then
                 echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                 exit 2
             fi
             # verified requires a review gate: either the simplify sentinel or the
             # explicit review sentinel written by vdgg_review_run,
             # and the review must not have edited implementation code.
-            if [ "$PHASE" = "testing" ] && echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
+            if [ "$PHASE" = "testing" ] && echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
                 # When a task allowlist is active, the task gate must have passed.
                 if [ -n "$TASK_ALLOWLIST_FILE" ] && [ -f "$TASK_ALLOWLIST_FILE" ] && [ ! -f "$TASK_GATE_FILE" ]; then
                     echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: Run vdgg_task_gate successfully before verified." >&2
+                    exit 2
+                fi
+                # Plan reconciliation: a task from todo.md needs a record in
+                # progress.md of how the diff compares with its plan
+                # (vdgg_plan_diff). Discrepancies are allowed; silence is not.
+                _vdgg_load_evidence
+                if ! RECON_PROBLEMS=$(_vdgg_ev_check_reconciliation "${TASKS_DIR}/todo.md" "${TASKS_DIR}/progress.md" "$(_vdgg_state_get current_task "$STATE_FILE")"); then
+                    echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: ${RECON_PROBLEMS}" >&2
                     exit 2
                 fi
                 SIMPLIFY_SENTINEL="$CWD/.claude/.vdgg-simplify-sentinel-${VDGG_ID}-${LOOP_COUNT}"
@@ -581,11 +689,11 @@ case "$PHASE" in
         # Reflection may use Bash, but it may not jump directly to verified.
         if [ "$TOOL_NAME" = "Bash" ]; then
             # verified is only reachable from testing after review.
-            if echo "$COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
+            if echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(advance|loop|write)[[:space:]]+[0-9]+[[:space:]]+verified'; then
                 echo "VibesDeGoGo! Step ${STEP} (${PHASE}) [${VDGG_ID}]: This action is blocked in the current phase." >&2
                 exit 2
             fi
-            if echo "$COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
+            if echo "$GATE_COMMAND" | grep -qE 'vdgg_state_(loop|advance|write)[[:space:]]+6[[:space:]]+implementing'; then
                 PROGRESS_FILE="${TASKS_DIR}/progress.md"
                 RETRY_INVESTIGATION_FILE="${TASKS_DIR}/investigation-r${LOOP_COUNT}.md"
                 if [ ! -f "$RETRY_INVESTIGATION_FILE" ]; then
@@ -657,7 +765,7 @@ case "$PHASE" in
                 CURBR=$(git -C "$CWD" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
                 # Escape base branch for grep -E before matching push commands.
                 BB_RE=$(printf '%s' "$BB" | sed 's/[^[:alnum:]]/\\&/g')
-                if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([[:space:]]|$)'; then
+                if echo "$COMMAND" | grep -qE '(^|[^a-zA-Z0-9_-])git[[:space:]]+(commit|push)([^[:alnum:]_-]|$)'; then
                     if [ "$CURBR" = "$BB" ]; then
                         echo "VibesDeGoGo! Step ${STEP} (commit) [${VDGG_ID}]: branch-pr workflow requires committing/pushing the feature branch and opening a PR." >&2
                         exit 2
@@ -682,5 +790,11 @@ case "$PHASE" in
         exit 2
         ;;
 esac
+
+# Step 3 read evidence from Bash, recorded only for a command no guard refused.
+if [ "$PHASE" = "investigating" ] && [ "$TOOL_NAME" = "Bash" ]; then
+    _vdgg_load_evidence
+    _vdgg_ev_bash_read_paths "$COMMAND" | _vdgg_ev_record_reads "$READ_LOG" "$CWD" || true
+fi
 
 exit 0

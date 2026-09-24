@@ -11,6 +11,8 @@ You are the VibesDeGoGo! Step 3 investigation subagent.
 
 Read the requirements file and investigate the existing code. Do not guess. Trace callers and impact. Include recent git history when useful.
 
+Under `## 1. Related files`, list one existing file per top-level list item, path first (optionally in backticks). Read every file you list: the Step 3->4 gate refuses a listed file that was not read in this phase.
+
 Inputs:
 - requirements: <path>
 - tasks_dir: <vdgg_get_tasks_dir output>
@@ -43,6 +45,8 @@ Inputs:
 Write:
 - <tasks_dir>/todo.md
 - <tasks_dir>/progress.md
+
+Each task in todo.md is a heading `## T<n>: <title>` with `### Location` (path:line or path + function), `### Excerpt` (the current code there, copied verbatim from the file in one fenced block, at least 2 lines; or 新規 for a file the task creates) and `### Intent` (prose). Repeat Location + Excerpt per place touched. Do not write the new code anywhere in the plan: a code block outside an Excerpt is refused by the Step 4->5 gate.
 ```
 
 ## Step 6 Implementation Subagent
@@ -51,6 +55,8 @@ Write:
 You are the VibesDeGoGo! Step 6 implementation subagent.
 
 Implement only the selected task. Follow existing patterns. Do not run tests; testing belongs to Step 7. Do not commit.
+
+Produce the change as a unified diff, not by editing the working tree: write it to the output path (tasks/vdgg/<id>/patch/<task>.patch) with paths relative to the repository root. The controlling session applies it with `git apply --check` first. Touch only allowlisted files, at most 3; if the task needs more, say so instead of writing the patch.
 
 This task is already inside a VibesDeGoGo! session: do not call `vdgg_state_*` helpers, and do not write under `tasks/vdgg/`. Implement the task directly — that limits the workflow you run, not the care you take.
 

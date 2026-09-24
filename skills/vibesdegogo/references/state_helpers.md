@@ -16,6 +16,8 @@ For plugin installs, set `VDGG_SKILL_DIR` to the skill's base directory announce
 tasks/vdgg/{id}/
 .claude/.vdgg-state-{id}
 .claude/.vdgg-friction-{id}
+.claude/.vdgg-read-{id}              files read during Step 3 (written by the hook)
+.claude/.vdgg-task-patchchain-{id}   Step 6 patch chain (written by the helpers)
 ```
 
 State file format:
@@ -45,6 +47,11 @@ vdgg_task_changed_files
 vdgg_task_check_allowlist
 vdgg_task_gate [verification command...]
 vdgg_task_rollback
+vdgg_patch_apply <patch under tasks/vdgg/{id}/patch/>
+vdgg_codemod_apply <expected-files> <command> [args...]
+vdgg_plan_diff [task-id]
+vdgg_check_investigation
+vdgg_check_plan
 vdgg_state_clear
 vdgg_friction_report
 vdgg_get_tasks_dir
@@ -64,7 +71,37 @@ verification command, and writes `.claude/.vdgg-task-gate-{id}-{loop}` on
 success — required before `verified` whenever an allowlist is active.
 `vdgg_task_rollback` reverts allowlisted changes to the baseline; if files
 outside the allowlist changed, it refuses — resolve those manually (e.g.
-`git status` + `git checkout -- <file>`) before retrying.
+`git status` + `git checkout -- <file>`) before retrying. Rollback also
+restarts the patch chain.
+
+## Evidence Helpers
+
+These live in `scripts/vdgg-evidence.sh`, which `vdgg-state.sh` sources.
+
+- `vdgg_patch_apply <file>` (implementing only): the file must be a `.patch`
+  or `.diff` under `tasks/vdgg/{id}/patch/`. It is copied to a private file,
+  checked (allowlisted exact paths, no protected paths, no symlinks, renames
+  or copies, at most 3 files, `git apply --check`) and applied; the patch
+  chain then records the new content.
+- `vdgg_codemod_apply <expected-files> <command> [args...]` (implementing
+  only): runs the command, then refuses unless exactly `<expected-files>`
+  (at least 1) allowlisted files changed and nothing off the allowlist did.
+- `vdgg_plan_diff [task-id]` writes
+  `tasks/vdgg/{id}/review/<task>-plan-vs-diff.md` (the task's plan, planned vs
+  changed files, and the diff since `vdgg_task_begin`) and prints its path.
+- `vdgg_check_investigation` / `vdgg_check_plan` print what the Step 3 -> 4 and
+  Step 4 -> 5 gates would refuse.
+
+`vdgg_task_begin` starts the chain with nothing applied and
+`vdgg_task_rollback` restarts it; `vdgg_state_loop` leaves it alone, so a
+change made outside a patch is still reported in the next loop.
+
+`vdgg_state_write` pairs each step with its phases (1 declare, 2
+requirements, 3 investigating, 4 planning, 5 task-selected, 6
+implementing/reflection, 7 testing/verified, 8 progress, 9 commit) and
+accepts each phase only after its predecessor in the workflow (`testing` from
+`implementing`, `reflection` from `testing`, `verified` from `testing`,
+`progress` from `verified`, `task-selected` from `planning` or `progress`).
 
 `vdgg_review_run` is the review gate for passes done without the Claude Code
 `simplify` skill. It runs the review command — an explicit one, or
@@ -97,8 +134,9 @@ Allowed transitions:
 .claude/.vdgg-error-pending
 .claude/.vdgg-simplify-sentinel-*
 .claude/.vdgg-review-sentinel-*
-.claude/.vdgg-task-*  (allowlists, baselines, gate files)
+.claude/.vdgg-task-*  (allowlists, baselines, gate files, patch chains)
 .claude/.vdgg-friction-*
+.claude/.vdgg-read-*
 ```
 
 `vdgg_state_clear` prints `vdgg_friction_report` to stdout before it removes anything.

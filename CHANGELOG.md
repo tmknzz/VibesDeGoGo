@@ -11,6 +11,39 @@ grouped by edition. Their histories are merged into this repository.
 
 ### Added
 
+- Evidence gates (both editions; docs/proposals/2026-09-24-evidence-gates.md
+  items 1-4 and 7). Gates now check evidence of the work, not the shape of
+  the artifacts:
+  - Step 3 -> 4: every file under `## 1. Related files` must exist and have
+    been read during `investigating` (Read/Grep/Glob/LS, or Bash readers such
+    as `cat`, `sed -n`, `head`, `rg`), as recorded by the PreToolUse hook in
+    `.vdgg-read-{id}`.
+  - Step 4 -> 5: each `## T<n>` task in `todo.md` carries `### Location`, a
+    `### Excerpt` of the current code that must match the file verbatim (or
+    `新規` for a new file), and a prose `### Intent`; the plan may not contain
+    the new code.
+  - Step 6 is patch first: implementation files change through
+    `vdgg_patch_apply` (`git apply --check`, allowlist, at most 3 files) or
+    `vdgg_codemod_apply` (dry-run count); 6 -> 7 requires the patch chain to be
+    intact.
+  - Step 7: `vdgg_plan_diff` lays the plan next to the diff, and `verified`
+    requires a `Plan reconciliation: <task>` record in `progress.md` for
+    planned tasks. Discrepancies are recorded, not blocked.
+  - Shared library `scripts/vdgg-evidence.sh`, byte-identical in both editions
+    and covered by `tests/test-edition-sync.sh`.
+  - SKILL.md (both editions) opens with the design principles: hooks check,
+    prose guides; gates look at evidence; only the implementer writes code.
+- **Breaking (workflow contract):** in `implementing` and `testing`, direct
+  Edit/Write (Codex: `apply_patch`/Edit/Write) on implementation files is
+  refused (review fixes go through reflection and a patch); `vdgg_task_begin`
+  is required for every task; a task title must start with its `todo.md` id
+  (`T1: ...`) when a plan exists; `vdgg_state_write` pairs each step with its
+  own phases and each phase with the phase it may follow (no `testing ->
+  progress` shortcut); the hooks refuse transitions whose step and phase are
+  not literal.
+  Allowlist entries can no longer start with `-` or name `.claude/.vdgg-*`,
+  `.codex/.vdgg-*`, `.vdgg-target` or `.git/`.
+
 - `VDGG_AUTO_MERGE=on` (environment variable, both editions). Step 9's
   `branch-pr` workflow then waits for the PR's checks and merges it instead of
   stopping for human merge approval. Unset or any other value keeps the previous

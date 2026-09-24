@@ -349,7 +349,7 @@ _vdgg_is_sidecar_path() {
 _vdgg_formation_keys() {
   printf '%s\n' \
     STEP_0_AI STEP_1_AI STEP_2_AI STEP_3_AI STEP_4_AI STEP_4R_AI STEP_5_AI \
-    STEP_6_AI STEP_6R_AI STEP_7_AI STEP_8_AI STEP_9_AI STEP_0_GRILL_AI \
+    STEP_6_AI STEP_6R_AI STEP_7_AI STEP_8_AI STEP_9_AI STEP_0_GRILL_AI STEP_SUB_AI \
     MAGI_MELCHIOR_AI MAGI_BALTHASAR_AI MAGI_CASPER_AI
 }
 
@@ -359,7 +359,7 @@ _vdgg_name_is_safe() {
 
 _vdgg_step_key_is_valid() {
   case "$1" in
-    STEP_0_AI|STEP_1_AI|STEP_2_AI|STEP_3_AI|STEP_4_AI|STEP_4R_AI|STEP_5_AI|STEP_6_AI|STEP_6R_AI|STEP_7_AI|STEP_8_AI|STEP_9_AI|STEP_0_GRILL_AI) return 0 ;;
+    STEP_0_AI|STEP_1_AI|STEP_2_AI|STEP_3_AI|STEP_4_AI|STEP_4R_AI|STEP_5_AI|STEP_6_AI|STEP_6R_AI|STEP_7_AI|STEP_8_AI|STEP_9_AI|STEP_0_GRILL_AI|STEP_SUB_AI) return 0 ;;
     MAGI_MELCHIOR_AI|MAGI_BALTHASAR_AI|MAGI_CASPER_AI) return 0 ;;
     *) return 1 ;;
   esac
@@ -399,6 +399,9 @@ _vdgg_seat_to_key() {
     8) echo STEP_8_AI ;;
     9) echo STEP_9_AI ;;
     0G|0g|[Gg][Rr][Ii][Ll][Ll]) echo STEP_0_GRILL_AI ;;
+    # SUB: the model for in-process subagents a step launches (the Step 6-R
+    # researcher, simplify's angle finders). Outside the "*" wildcard.
+    [Ss][Uu][Bb]) echo STEP_SUB_AI ;;
     [Mm][Aa][Gg][Ii]-[Mm]) echo MAGI_MELCHIOR_AI ;;
     [Mm][Aa][Gg][Ii]-[Bb]) echo MAGI_BALTHASAR_AI ;;
     [Mm][Aa][Gg][Ii]-[Cc]) echo MAGI_CASPER_AI ;;
@@ -411,8 +414,10 @@ _vdgg_seat_to_key() {
 _vdgg_model_alias() {
   case "$1" in
     opus5) echo claude-opus-5 ;;
+    opus55) echo claude-opus-5-5 ;;
     sonnet5) echo claude-sonnet-5 ;;
     fable5) echo claude-fable-5 ;;
+    fable51) echo claude-fable-5-1 ;;
     haiku45) echo claude-haiku-4-5 ;;
     *) return 1 ;;
   esac
@@ -435,7 +440,7 @@ _vdgg_token_is_safe() {
 # across bash and zsh, which does not word-split unquoted expansions).
 _vdgg_is_effort_token() {
   case "$1" in
-    claude) case "$2" in low|medium|high) return 0 ;; esac ;;
+    claude) case "$2" in low|medium|high|xhigh|max) return 0 ;; esac ;;
     codex) case "$2" in minimal|low|medium|high|xhigh) return 0 ;; esac ;;
   esac
   return 1
@@ -469,11 +474,13 @@ _vdgg_parse_seat_value() {
       }
       _VDGG_SEAT_NAME="inline"
       ;;
-    opus5|sonnet5|fable5|haiku45)
-      [ -z "$tok1" ] || {
-        echo "vdgg-formation: model shorthand '$_VDGG_SEAT_NAME' takes no extra tokens ($label): $value" >&2
+    opus5|opus55|sonnet5|fable5|fable51|haiku45)
+      # A shorthand fixes the model; it takes at most one claude effort.
+      if [ -n "$tok2" ] || { [ -n "$tok1" ] && ! _vdgg_is_effort_token claude "$tok1"; }; then
+        echo "vdgg-formation: model shorthand '$_VDGG_SEAT_NAME' takes only an effort (low|medium|high|xhigh|max) ($label): $value" >&2
         return 1
-      }
+      fi
+      _VDGG_SEAT_EFFORT="$tok1"
       _VDGG_SEAT_MODEL=$(_vdgg_model_alias "$_VDGG_SEAT_NAME")
       _VDGG_SEAT_NAME="claude"
       ;;
@@ -601,7 +608,7 @@ _vdgg_validate_formation_file() {
       key="*"
     else
       key=$(_vdgg_seat_to_key "$seat") || {
-        echo "vdgg-formation: unknown seat in $file: $seat (valid: 0, 0G, 1, 2, 3, 4, 4R, 5, 6, 6R, 7, 8, 9, MAGI-M, MAGI-B, MAGI-C, *)" >&2
+        echo "vdgg-formation: unknown seat in $file: $seat (valid: 0, 0G, 1, 2, 3, 4, 4R, 5, 6, 6R, 7, 8, 9, SUB, MAGI-M, MAGI-B, MAGI-C, *)" >&2
         return 1
       }
     fi
@@ -758,6 +765,95 @@ vdgg_formation_preflight() {
 $(_vdgg_split_specs "$raw")
 EOF
   done
+  [ -n "${_VDGG_QUIET_PREFLIGHT:-}" ] || _vdgg_warn_unknown_models "$formation"
+}
+
+# Model names a codex executor accepts, from the local Codex catalog:
+# `model_catalog_json = "<path>"` in ${CODEX_HOME:-~/.codex}/config.toml, else
+# ${CODEX_HOME:-~/.codex}/models_cache.json. Prints nothing when there is no
+# catalog (or no jq), so callers stay silent on machines without Codex.
+_vdgg_codex_model_names() {
+  local home="${CODEX_HOME:-$HOME/.codex}" catalog=""
+  if [ -f "$home/config.toml" ]; then
+    catalog=$(sed -n 's/^[[:space:]]*model_catalog_json[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$home/config.toml" 2>/dev/null | head -1)
+    case "$catalog" in
+      ''|/*) ;;
+      *) catalog="$home/$catalog" ;;
+    esac
+  fi
+  [ -n "$catalog" ] || catalog="$home/models_cache.json"
+  [ -f "$catalog" ] && command -v jq >/dev/null 2>&1 || return 0
+  jq -r '[.. | objects | (.slug?, .id?, .model?, .name?) | strings] | .[]' "$catalog" 2>/dev/null || true
+}
+
+# Warn (never fail) about model names that look mistyped: a claude model must
+# be an alias (opus, sonnet, haiku, fable, ...) or claude-<family>-<digits>;
+# a codex model must be in the local Codex catalog when one exists. The
+# executors only fail at run time, so this surfaces a typo at selection time.
+_vdgg_warn_unknown_models() {
+  local formation="$1" step_key raw spec codex_names="" codex_loaded=0
+  while IFS= read -r step_key; do
+    [ -n "$step_key" ] || continue
+    raw=$(_vdgg_formation_value "$formation" "$step_key")
+    while IFS= read -r spec || [ -n "$spec" ]; do
+      [ -n "$spec" ] || continue
+      _vdgg_parse_seat_value "$spec" "$step_key" 2>/dev/null || continue
+      [ -n "$_VDGG_SEAT_MODEL" ] || continue
+      case "$_VDGG_SEAT_NAME" in
+        claude)
+          case "$_VDGG_SEAT_MODEL" in
+            opus|sonnet|haiku|fable|opusplan|default) ;;
+            claude-opus-[0-9]*|claude-sonnet-[0-9]*|claude-haiku-[0-9]*|claude-fable-[0-9]*) ;;
+            *) echo "vdgg-formation: warning: $step_key names an unknown claude model '$_VDGG_SEAT_MODEL' (expected opus/sonnet/haiku/fable or claude-<family>-<version>)" >&2 ;;
+          esac
+          ;;
+        codex)
+          if [ "$codex_loaded" -eq 0 ]; then
+            codex_names=$(_vdgg_codex_model_names)
+            codex_loaded=1
+          fi
+          [ -n "$codex_names" ] || continue
+          if ! printf '%s\n' "$codex_names" | grep -qxF -- "$_VDGG_SEAT_MODEL"; then
+            echo "vdgg-formation: warning: $step_key names a codex model '$_VDGG_SEAT_MODEL' that is not in the local Codex model catalog" >&2
+          fi
+          ;;
+      esac
+    done <<EOF
+$(_vdgg_split_specs "$raw")
+EOF
+  done <<EOF
+$(_vdgg_formation_keys)
+EOF
+  return 0
+}
+
+# How to launch an in-process subagent under the SUB seat. Prints one line:
+#   inline                   -> no SUB seat: the subagent inherits this session's model
+#   agent <family> [effort]  -> pass <family> (opus|sonnet|haiku|fable) as the
+#                               Agent tool's model; effort applies only where
+#                               the launcher accepts one
+#   executor                 -> SUB names an external AI: run the subagent's
+#                               work with vdgg_executor_run STEP_SUB_AI instead
+vdgg_subagent_model() {
+  local spec family
+  spec=$(vdgg_formation_resolve STEP_SUB_AI "${1:-}") || return 1
+  if [ "$spec" = "inline" ]; then
+    printf 'inline\n'
+    return 0
+  fi
+  _vdgg_parse_seat_value "$spec" STEP_SUB_AI || return 1
+  if [ "$_VDGG_SEAT_NAME" != "claude" ] || [ -f "$(_vdgg_executor_file claude)" ]; then
+    printf 'executor\n'
+    return 0
+  fi
+  case "$_VDGG_SEAT_MODEL" in
+    ''|sonnet|claude-sonnet-*) family=sonnet ;;
+    opus|opusplan|claude-opus-*) family=opus ;;
+    haiku|claude-haiku-*) family=haiku ;;
+    fable|claude-fable-*) family=fable ;;
+    *) printf 'executor\n'; return 0 ;;
+  esac
+  printf 'agent %s%s\n' "$family" "${_VDGG_SEAT_EFFORT:+ $_VDGG_SEAT_EFFORT}"
 }
 
 vdgg_formation_resolve_all() {
@@ -767,7 +863,7 @@ vdgg_formation_resolve_all() {
     return 1
   }
   [ -n "$formation" ] || formation=$(vdgg_formation_current)
-  vdgg_formation_preflight "$formation" || return 1
+  _VDGG_QUIET_PREFLIGHT=1 vdgg_formation_preflight "$formation" || return 1
   raw=$(_vdgg_formation_value "$formation" "$step_key")
   while IFS= read -r spec || [ -n "$spec" ]; do
     [ -n "$spec" ] || continue

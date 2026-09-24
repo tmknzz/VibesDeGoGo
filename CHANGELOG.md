@@ -11,6 +11,14 @@ grouped by edition. Their histories are merged into this repository.
 
 ### Added
 
+- Formation model and effort syntax (both editions; proposal item 6):
+  shorthands `opus55` (`claude-opus-5-5`) and `fable51` (`claude-fable-5-1`);
+  a shorthand may carry one effort (`opus55 medium`); claude effort accepts
+  `xhigh` and `max`; seat `SUB` sets the model for in-process subagents
+  (`vdgg_subagent_model`); `vdgg_formation_preflight` warns about mistyped
+  claude models and codex models missing from the local Codex catalog
+  (silent when there is no catalog).
+
 - Optional plan review seat `4R` in Formations (both editions; proposal item
   5). A Formation that names an external AI on `4R` has it review the Step 4
   plan into `tasks/vdgg/{id}/plan-review.md`, and the Step 4 -> 5 hook

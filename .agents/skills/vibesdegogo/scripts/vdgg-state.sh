@@ -278,7 +278,17 @@ _vdgg_path_is_safe_relative() {
   entry=$(_vdgg_normalize_path "$1")
   [ -n "$entry" ] || return 1
   case "$entry" in
-    /*|../*|*/../*|..|.) return 1 ;;
+    # A leading - would reach find/cp/git as an option; the workflow's own
+    # sidecars, the trusted .vdgg-target and git internals are never task
+    # files (the hooks refuse to edit them anyway).
+    /*|../*|*/../*|*/..|..|.|-*) return 1 ;;
+    # Only canonical spellings, so the protected-path match below sees the
+    # path as the filesystem does (.claude/, .claude//x, a/./b).
+    */|*//*|*/./*) return 1 ;;
+  esac
+  # Case-folded: on a case-insensitive filesystem .CODEX/ is .codex/.
+  case "$(printf '%s' "$entry" | tr '[:upper:]' '[:lower:]')" in
+    .claude|.codex|.claude/.vdgg-*|.codex/.vdgg-*|.vdgg-target|*/.vdgg-target|.git|.git/*|*/.git|*/.git/*) return 1 ;;
   esac
   return 0
 }
@@ -912,6 +922,8 @@ vdgg_state_init() {
 
   rm -f "${VDGG_STATE_DIR}/.vdgg-error-pending" 2>/dev/null || true
   _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-review-sentinel-*'
+  _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-read-*'
+  _vdgg_rm_glob "${VDGG_STATE_DIR}" '.vdgg-task-patchchain-*'
   echo "$id" > "$active_file"
   cat > "$state_file" <<EOF
 step=1
@@ -952,7 +964,13 @@ vdgg_state_write() {
   state_file=$(_vdgg_get_state_file)
   [ -f "$state_file" ] || { echo "vdgg-state: state file not found" >&2; return 1; }
   current_step=$(_vdgg_state_field step "$state_file")
-  _vdgg_check_step_transition "${current_step:-0}" "$new_step"
+  _vdgg_check_step_transition "${current_step:-0}" "$new_step" || return 1
+  # Each step has its own phases, and verified is entered from testing:
+  # otherwise a same-step phase jump walks past the phase-keyed gates.
+  if ! _vdgg_ev_step_phase_ok "$new_step" "$new_phase" "$(_vdgg_state_field phase "$state_file")"; then
+    echo "vdgg-state: invalid or blocked state transition (${new_phase} at step ${new_step} does not follow the current phase)" >&2
+    return 1
+  fi
 
   # Omitted optional fields preserve the stored values; a literal `-` clears a
   # task field explicitly (used at the 8->5 boundary).
@@ -1328,6 +1346,9 @@ vdgg_task_begin() {
     echo "vdgg_task_begin: state write failed; task gate not armed." >&2
     return 1
   fi
+  # Start the Step 6 patch chain from the baseline content.
+  _vdgg_ev_chain_reset "$id" 0 "$allowlist_file" \
+    || echo "vdgg_task_begin: patch chain not started; Step 6 -> 7 will refuse until vdgg_task_begin succeeds." >&2
   echo "vdgg-task: began '${task_title}' with allowlist ${allowlist_file}" >&2
 }
 
@@ -1417,19 +1438,23 @@ vdgg_task_rollback() {
   vdgg_task_check_allowlist || return 1
   rm -f "$gate_file"
   changed=$(vdgg_task_changed_files)
-  [ -n "$changed" ] || return 0
-  while IFS= read -r file; do
-    [ -n "$file" ] || continue
-    if [ -e "$baseline_dir/$file" ]; then
-      rm -rf "$VDGG_CWD/$file"
-      mkdir -p "$(dirname "$VDGG_CWD/$file")"
-      cp -R "$baseline_dir/$file" "$VDGG_CWD/$file"
-    else
-      rm -rf "$VDGG_CWD/$file"
-    fi
-  done <<EOF
+  if [ -n "$changed" ]; then
+    while IFS= read -r file; do
+      [ -n "$file" ] || continue
+      if [ -e "$baseline_dir/$file" ]; then
+        rm -rf "$VDGG_CWD/$file"
+        mkdir -p "$(dirname "$VDGG_CWD/$file")"
+        cp -R "$baseline_dir/$file" "$VDGG_CWD/$file"
+      else
+        rm -rf "$VDGG_CWD/$file"
+      fi
+    done <<EOF
 $changed
 EOF
+  fi
+  # The task starts over: so does its patch chain.
+  _vdgg_ev_chain_reset "$id" 0 "$allowlist_file" || true
+  [ -n "$changed" ] || return 0
   echo "vdgg-task: rolled back current task changes" >&2
 }
 
@@ -1444,5 +1469,12 @@ vdgg_state_clear() {
   _vdgg_rm_glob "${VDGG_STATE_DIR}" ".vdgg-task-baseline-status-${id}-*"
   _vdgg_rm_glob "${VDGG_STATE_DIR}" ".vdgg-task-gate-${id}-*"
   _vdgg_rm_dir_glob "${VDGG_STATE_DIR}" ".vdgg-task-baseline-${id}-*"
+  rm -f "${VDGG_STATE_DIR}/.vdgg-read-${id}" "${VDGG_STATE_DIR}/.vdgg-task-patchchain-${id}"
   echo "vdgg-state: cleared id=${id}" >&2
 }
+
+# Evidence gates shared with the Claude Code edition: the Step 6 patch chain
+# (vdgg_patch_apply, vdgg_codemod_apply), vdgg_plan_diff and the pre-checks
+# vdgg_check_investigation / vdgg_check_plan.
+# shellcheck source=vdgg-evidence.sh
+. "${_VDGG_SCRIPT_DIR}/vdgg-evidence.sh"

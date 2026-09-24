@@ -8,6 +8,14 @@ version: 0.4.0
 
 VibesDeGoGo! for Codex is a serial, state-file-driven workflow for autonomous coding in Codex. It follows the VibesDeGoGo! for Claude Code step model first; do not simplify the workflow unless the user explicitly asks for a lighter mode.
 
+## Design Principles
+
+These three rules decide how every gate below is built.
+
+- **Hooks check what must hold; prose only guides judgment.** Anything the workflow depends on is verified by a hook or a state helper. Text in this file or AGENTS.md is written on the assumption that it will sometimes be skipped: it explains how to decide, and is never the only thing keeping the workflow safe.
+- **Gates look at evidence, not form.** A gate opens on something that exists only if the work was done: files actually read in Step 3, excerpts that match the current code verbatim in Step 4, a patch that `git apply --check` accepts in Step 6, a recorded comparison of plan and diff in Step 7. Headings and file existence alone open nothing.
+- **Only the implementer writes code.** Planning names the location, quotes the current code and states the intent, but does not write the new code. The implementing seat (this session, or the Formation's Step 6 executor) produces it as a patch, so the code a different-vendor reviewer reads was not authored by the planner.
+
 ## When To Use
 
 Use this skill for coding work where the user wants Codex to continue through implementation, verification, and commit/PR.
@@ -94,7 +102,7 @@ Executor `COMMAND=` lines can then call `vdgg-llm-start <id>` through a wrapper 
 
 ## Important Codex Differences
 
-- State lives in `.codex/.vdgg-active` and `.codex/.vdgg-state-{id}`.
+- State lives in `.codex/.vdgg-active` and `.codex/.vdgg-state-{id}`. Each step accepts only its own phases (1 declare, 2 requirements, 3 investigating, 4 planning, 5 task-selected, 6 implementing/reflection, 7 testing/verified, 8 progress, 9 commit), and each phase only after the phase before it in the workflow (`testing` only from `implementing`, `reflection` only from `testing`, `verified` only from `testing`, `progress` only from `verified`). The pretool hook refuses a `vdgg_state_advance/loop/write` whose step and phase are not written literally. The Step 3 read log is `.codex/.vdgg-read-{id}` and the Step 6 patch chain `.codex/.vdgg-task-patchchain-{id}`.
 - Task files still live in `tasks/vdgg/{id}/`.
 - Prefer global hooks in `~/.codex/hooks.json` or `~/.codex/config.toml` so VDGG rules apply across repositories. Repo-local `.codex/hooks.json` is optional and only covers that repository after trust.
 - Hook commands should call the installed skill path, normally `$HOME/.agents/skills/vibesdegogo`, or set `VDGG_CODEX_SKILL_DIR` to an absolute skill directory. Do not assume the target project contains `.agents/skills/vibesdegogo`.
@@ -312,6 +320,8 @@ An additional `## Lessons applied` section follows (see below) — that heading 
   for f in $(find tasks/vdgg -name lessons.md -exec ls -t {} + 2>/dev/null | head -20); do echo "--- $f ---"; cat "$f"; done
   ```
 - Record unknowns explicitly in `tasks/vdgg/{id}/investigation.md`.
+- List every related file under `## 1. Related files`, one top-level list item per file with the path first (optionally in backticks; a `:line` suffix is fine). List files that exist now; files the change will create belong in the Step 4 plan.
+- Read each listed file during this phase with a Bash reader (`cat`, `sed -n`, `head`, `tail`, `rg`, `grep`, `git show REV:path`, ...). While the phase is `investigating`, the pretool hook records the files those commands name in `.codex/.vdgg-read-{id}` (Codex hands the hook no separate read tool). The Step 3 -> 4 gate refuses when a listed file does not exist or was not read in this phase, or when nothing is listed. `vdgg_check_investigation` prints what is still missing.
 
 Advance:
 
@@ -324,11 +334,33 @@ source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 3 investigating
 ```
 
-The hook blocks Step 4 until `investigation.md` exists and contains all seven required headings each with a non-empty body.
+The hook blocks Step 4 until `investigation.md` exists, contains all seven required headings each with a non-empty body, and every file under `## 1. Related files` exists and was read during this phase.
 
 ## Step 4: Planning
 
 Create `tasks/vdgg/{id}/todo.md` and `tasks/vdgg/{id}/progress.md`.
+
+`todo.md` carries the plan evidence the Step 4 -> 5 gate checks. Each task is a level-2 heading `## T<n>: <title>` with these level-3 sections:
+
+````markdown
+## T1: <title>
+
+### Location
+`path/to/file.sh:120` (or the path plus a function name)
+
+### Excerpt
+```sh
+<the current code at that location, copied verbatim, at least 2 lines>
+```
+
+### Intent
+<what changes there and why, in prose>
+````
+
+- Repeat `### Location` + `### Excerpt` for each place the task touches. For a file the task creates, write `新規` (or `new`) as the Excerpt instead of a code block.
+- The gate compares every excerpt with the file line by line, indentation included, so copy it from the file you read in Step 3; code written from memory rarely matches.
+- Do not write the new code in the plan: a fenced block anywhere in a task other than the Excerpt is refused. The Intent says what changes; the implementer writes the code in Step 6.
+- The gate runs on `vdgg_state_advance 5 task-selected` and on `vdgg_task_begin` issued from planning. `vdgg_check_plan` prints the problems first.
 
 Advance:
 
@@ -343,7 +375,7 @@ vdgg_state_advance 4 planning
 
 ## Step 5: Select One Task
 
-Choose exactly one task sized for a full implementation cycle — or, during a followup sweep, the next pending `TF` task from the queue in `progress.md`:
+Choose exactly one task sized for a full implementation cycle — or, during a followup sweep, the next pending `TF` task from the queue in `progress.md`. Start the task title with its id (`T1: ...`, `TF1: ...`); the Step 7 plan reconciliation looks the task up by it. `vdgg_task_begin` is required for every task, `TF` followups included:
 
 - one task must be small enough to complete implementation, tests, build, and real/manual check in one Step 6 to Step 8 loop;
 - split separate provider/API/auth/key-storage/UI/persistence/versioning risks into separate tasks;
@@ -377,9 +409,17 @@ VDGG_CODEX_SKILL_DIR="${VDGG_CODEX_SKILL_DIR:-$HOME/.agents/skills/vibesdegogo}"
 [ -f "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh" ] || VDGG_CODEX_SKILL_DIR="$VDGG_REPO_ROOT/.agents/skills/vibesdegogo"
 source "$VDGG_CODEX_SKILL_DIR/scripts/vdgg-state.sh"
 vdgg_state_advance 6 implementing
+# write the change as a unified diff (paths relative to the repository root):
+#   tasks/vdgg/{id}/patch/T1.patch
+vdgg_patch_apply tasks/vdgg/{id}/patch/T1.patch
 ```
 
-Do not run verification commands in this phase.
+Do not run verification commands in this phase. Step 6 is patch first: implementation files change only through a checked patch.
+
+- In `implementing`, `apply_patch`/Edit/Write on implementation files is refused; write the patch file (a task note under `tasks/vdgg/{id}/patch/`) instead. `vdgg_patch_apply` runs `git apply --check` and applies the patch only if it passes. Every file it touches must be on the task allowlist, symlinks, renames and copies are refused, and a patch that touches more than 3 files is refused: that size means the task should have been split. Write a follow-up patch against the new state of the files for the next change in the same task.
+- Mechanical bulk edits use a codemod instead: run the dry run first, then `vdgg_codemod_apply <expected-files> <command> [args...]`. The helper refuses when the number of changed allowlisted files differs from the dry run, or when files off the allowlist changed.
+- `vdgg_state_advance 7 testing` is refused until at least one patch or codemod has been applied for the task and the allowlisted files still hold exactly what the last one left. `vdgg_task_rollback` restores the baseline and restarts the patch chain.
+- When a Formation assigns Step 6 to an external AI, call `vdgg_executor_run STEP_6_AI <input-file> tasks/vdgg/{id}/patch/<task>.patch` so the executor writes the patch, then apply it with `vdgg_patch_apply`.
 
 ## Step 7: Verify And Review
 
@@ -431,6 +471,24 @@ Relevant `.vdgg-target` key for Step 7:
 REVIEW_COMMAND="claude -p 'review the working tree diff for correctness and security (injection, secrets exposure, unsafe file/network/exec operations, data loss); exit non-zero on blocking findings'"
 ```
 
+### Plan reconciliation
+
+Before the review, compare the task's plan with what was actually changed:
+
+```bash
+vdgg_plan_diff            # writes tasks/vdgg/{id}/review/<task>-plan-vs-diff.md and prints its path
+```
+
+The report places the task's plan (Locations, Excerpts, Intent) next to the diff since `vdgg_task_begin`, and lists planned files that changed, planned files that did not, and changed files the plan does not mention. Give it to the reviewer with the diff and ask for (1) changes the plan does not mention and (2) planned changes that were not made. Then record the outcome in `progress.md`:
+
+```markdown
+### Plan reconciliation: T1
+- path/a.sh: as planned
+- path/b.sh: not planned; needed because ...
+```
+
+Discrepancies do not block: forcing the diff to match the plan would push a wrong plan into the code. An unrecorded comparison does block. For a task from `todo.md`, `vdgg_state_advance 7 verified` is refused until that heading exists with a non-empty body. Followup `TF` tasks that are not in `todo.md` need no record. Any other task must be one of `todo.md`'s tasks, and its title starts with its id (`T1: ...`).
+
 ### Multi-perspective review is mandatory (Layer 2)
 
 Single-pass Step 7 review is prohibited. The reviewer must inspect the diff through **N ≥ 3 independent perspectives** ("lenses"), and the merged review output must carry `lens_count` at the top level so `vdgg_review_run` can verify the requirement was met (a lens_count below 3 is rejected by the Layer 2 validator that `vdgg_review_run` invokes after Layer 1). This is the default; there is no per-task opt-in.
@@ -475,10 +533,10 @@ After the Step 7 review — self-review, `vdgg_review_run`, or MAGI — surfaces
 
 Response:
 
-- Any **high or medium** finding → fix it in implementation files. The review sentinel (`.codex/.vdgg-review-sentinel-{id}-{loop}`) will flip to `modified=1`, routing you through reflection — this is correct.
+- Any **high or medium** finding → go to reflection (`vdgg_state_advance 6 reflection`) and make the fix in the next loop as a patch (`vdgg_patch_apply`). `apply_patch`/Edit/Write on implementation files are refused in `testing` as in `implementing`; an edit that gets through anyway flips the review sentinel (`.codex/.vdgg-review-sentinel-{id}-{loop}`) to `modified=1`, and the patch chain reports it.
 - **All findings are low (or `[]`)** → DO NOT edit implementation files. Append the findings to `tasks/vdgg/{id}/followup.md` — or, inside a `TF` followup task, to `followup-final.md` — and advance directly to `verified`. Low items are collected by the Step 8 followup sweep.
 
-This stops convergence-loops on cosmetic findings while keeping the hook discipline intact: any implementation edit during testing still flips `modified=1`, so there is no escape hatch for high/medium.
+This stops convergence-loops on cosmetic findings while keeping the hook discipline intact: a high/medium fix always costs a reflection and a patch, so there is no escape hatch for it.
 
 When listing findings, always assign an explicit `severity` field per finding so the classification is auditable. If the review output omits severity, classify each finding yourself before deciding the response.
 

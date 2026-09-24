@@ -137,6 +137,8 @@ assert_eq "src/app.sh" "$REARM_ALLOWLIST_CONTENT" "blocked re-arm leaves active 
 REARM_STEP=$(grep '^step=' ".claude/.vdgg-state-${IDRA}" | cut -d= -f2)
 assert_eq "6" "$REARM_STEP" "blocked re-arm leaves state untouched"
 vdgg_state_advance 7 testing >/dev/null 2>&1
+# Real flow: testing -> verified -> progress (verified cannot be skipped).
+vdgg_state_advance 7 verified >/dev/null 2>&1
 vdgg_state_advance 8 progress >/dev/null 2>&1
 set +e
 vdgg_task_begin "TA: widened via 8->5" src/app.sh src/other.sh \

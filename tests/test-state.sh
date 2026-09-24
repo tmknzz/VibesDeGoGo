@@ -51,6 +51,8 @@ vdgg_state_write 7 testing 1 "T" "/tmp/vdgg-al" "/tmp/vdgg-bs" >/tmp/vdgg-test-s
 ALLOWLIST_FIELD=$(grep '^task_allowlist_file=' ".claude/.vdgg-state-${ID}" | cut -d= -f2-)
 assert_eq "/tmp/vdgg-al" "$ALLOWLIST_FIELD" "task fields can be set via vdgg_state_write"
 
+# Real flow: testing -> verified -> progress (verified cannot be skipped).
+vdgg_state_advance 7 verified >/dev/null 2>&1
 vdgg_state_advance 8 progress >/tmp/vdgg-test-state-8.out 2>/tmp/vdgg-test-state-8.err
 vdgg_state_advance 5 task-selected >/tmp/vdgg-test-state-8to5.out 2>/tmp/vdgg-test-state-8to5.err
 LOOP_COUNT=$(grep '^loop_count=' ".claude/.vdgg-state-${ID}" | cut -d= -f2)

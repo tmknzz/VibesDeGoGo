@@ -24,7 +24,7 @@ brew install jq
 - `skills/vibesdegogo/references/`: ワークフロー参照資料
 - `hooks/hooks.json`, `.claude-plugin/`: Claude Code プラグインとしての梱包
 - `.agents/skills/vibesdegogo/`: 独自の scripts と references を持つ Codex skill。
-  大半はエディション固有だが、6 ファイルだけは両ツリーで共通 ──
+  大半はエディション固有だが、7 ファイルだけは両ツリーで共通 ──
   後述の「両エディションで共通のファイル」を参照
 - `.codex/hooks.json`: Codex のプロジェクトローカル hook 登録
 - `tests/`: 両エディション用の依存ゼロの smoke テスト
@@ -67,12 +67,13 @@ hook / state スクリプト内のコメントに対して、広域 `sed -i` で
 
 ## 両エディションで共通のファイル
 
-次の 6 ファイルは `skills/vibesdegogo/` と `.agents/skills/vibesdegogo/` の
+次の 7 ファイルは `skills/vibesdegogo/` と `.agents/skills/vibesdegogo/` の
 両方に存在し、byte 一致を保つ必要があります。
 
 - `scripts/vdgg-llm-start.sh`
 - `scripts/vdgg-exec-claude.sh`
 - `scripts/vdgg-exec-codex.sh`
+- `scripts/vdgg-evidence.sh`
 - `references/servers-conf.md`
 - `references/servers.conf.example`
 - `references/local-inference-setup.md`
@@ -81,11 +82,13 @@ hook / state スクリプト内のコメントに対して、広域 `sed -i` で
 hook / state スクリプトに限らず、ドキュメントやコメントだけの変更を含む
 すべての変更に適用されます。
 
-この同期を検査するテストはないので、自分で確認してください:
+`tests/test-edition-sync.sh` が上記のうち `references/local-inference-setup.md`
+以外を検査します（このファイルはエディションごとにインストール先の記述が意図的に
+異なります）。すべてを手で確認するには:
 
 ```bash
 for f in scripts/vdgg-llm-start.sh scripts/vdgg-exec-claude.sh \
-         scripts/vdgg-exec-codex.sh references/servers-conf.md \
+         scripts/vdgg-exec-codex.sh scripts/vdgg-evidence.sh references/servers-conf.md \
          references/servers.conf.example references/local-inference-setup.md; do
   cmp "skills/vibesdegogo/$f" ".agents/skills/vibesdegogo/$f" || echo "OUT OF SYNC: $f"
 done

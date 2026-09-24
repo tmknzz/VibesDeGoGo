@@ -264,10 +264,15 @@ write_state implementing 6
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/src/app.sh"}}')
 assert_exit_code 2 "$STATUS" "implementing edit without allowlist is blocked"
 
-# Task allowlist: allowlisted path is editable, others are not.
+# Task allowlist: implementation edits go through vdgg_patch_apply in both
+# implementing and testing (tests/test-evidence-gates.sh covers the gate);
+# a non-allowlisted path stays blocked either way.
 write_state_with_allowlist implementing 6
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/src/app.sh"}}')
-assert_exit_code 0 "$STATUS" "allowlisted edit passes"
+assert_exit_code 2 "$STATUS" "allowlisted edit is patch-first in implementing"
+write_state_with_allowlist testing 7
+STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/src/app.sh"}}')
+assert_exit_code 2 "$STATUS" "allowlisted edit is refused in testing too (review fixes go through a patch)"
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/src/other.sh"}}')
 assert_exit_code 2 "$STATUS" "non-allowlisted edit is blocked"
 
@@ -456,6 +461,14 @@ rm -f "$LESSONS_REQ"
 # skills/vibesdegogo/references/subagent_prompts.md.
 INV="$TMPDIR_VDGG/tasks/vdgg/test-id/investigation.md"
 ADVANCE_INV_CMD='# [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0\nvdgg_state_advance 4 planning'
+
+# The shared fixture lists one Related file; the read gate (see
+# tests/test-evidence-gates.sh) needs it to exist and be read with a Bash
+# reader while investigating before the heading cases below can pass.
+printf 'related\n' > "$TMPDIR_VDGG/$VDGG_INV_RELATED"
+write_state investigating 3
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat '"$VDGG_INV_RELATED"'"}}')
+assert_exit_code 0 "$STATUS" "Step 4 gate: reading the Related file passes"
 
 # Case A: investigation.md missing -> blocked.
 write_state investigating 3

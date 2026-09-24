@@ -122,7 +122,7 @@ skills/vibesdegogo/
 tests/
 ```
 
-Six files are duplicated between the two trees on purpose and must stay byte-identical: the three executor wrappers (`vdgg-llm-start.sh`, `vdgg-exec-claude.sh`, `vdgg-exec-codex.sh`) and the three shared references (`servers-conf.md`, `servers.conf.example`, `local-inference-setup.md`). See [CONTRIBUTING.md](CONTRIBUTING.md).
+Seven files are duplicated between the two trees on purpose and must stay byte-identical: the three executor wrappers (`vdgg-llm-start.sh`, `vdgg-exec-claude.sh`, `vdgg-exec-codex.sh`), the evidence-gate library (`vdgg-evidence.sh`) and the three shared references (`servers-conf.md`, `servers.conf.example`, `local-inference-setup.md`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Install: Claude Code edition
 

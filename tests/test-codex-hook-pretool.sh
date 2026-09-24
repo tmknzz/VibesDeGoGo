@@ -55,7 +55,11 @@ assert_exit_code 2 "$STATUS" "implementing blocks edits before task allowlist"
 
 write_state_with_allowlist implementing 6
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/functions/index.js"}}')
-assert_exit_code 0 "$STATUS" "implementing allows edits inside task allowlist"
+assert_exit_code 2 "$STATUS" "implementing is patch-first even inside the task allowlist"
+
+write_state_with_allowlist testing 7
+STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/functions/index.js"}}')
+assert_exit_code 2 "$STATUS" "testing refuses direct edits inside the task allowlist too"
 
 write_state_with_allowlist implementing 6
 STATUS=$(run_hook '{"tool_name":"Edit","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"file_path":"'"$TMPDIR_VDGG"'/functions/other.js"}}')
@@ -345,6 +349,14 @@ rm -f "$LESSONS_REQ"
 # canonical contract enforced via an awk block.
 INV="$TMPDIR_VDGG/tasks/vdgg/test-id/investigation.md"
 ADVANCE_INV_CMD='# [VibesDeGoGo! Step 4 Start] step=4, phase=planning, loop=0\nvdgg_state_advance 4 planning'
+
+# The shared fixture lists one Related file; the read gate (see
+# tests/test-evidence-gates.sh) needs it to exist and be read with a Bash
+# reader while investigating before the heading cases below can pass.
+printf 'related\n' > "$TMPDIR_VDGG/$VDGG_INV_RELATED"
+write_state investigating 3
+STATUS=$(run_hook '{"tool_name":"Bash","cwd":"'"$TMPDIR_VDGG"'","tool_input":{"command":"cat '"$VDGG_INV_RELATED"'"}}')
+assert_exit_code 0 "$STATUS" "Codex Step 4 gate: reading the Related file passes"
 
 # Case A: investigation.md missing -> blocked.
 write_state investigating 3

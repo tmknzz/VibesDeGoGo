@@ -8,6 +8,14 @@ version: 0.4.0
 
 VibesDeGoGo! is a serial, state-file-driven workflow for autonomous coding with Claude Code. It uses a state file plus Claude Code hooks to mechanically enforce the order of work. The agent does the work directly by default, and delegates to subagents only when parallel work is clearly useful.
 
+## Design Principles
+
+These three rules decide how every gate below is built.
+
+- **Hooks check what must hold; prose only guides judgment.** Anything the workflow depends on is verified by a hook or a state helper. Text in this file, AGENTS.md or CLAUDE.md is written on the assumption that it will sometimes be skipped: it explains how to decide, and is never the only thing keeping the workflow safe.
+- **Gates look at evidence, not form.** A gate opens on something that exists only if the work was done: files actually read in Step 3, excerpts that match the current code verbatim in Step 4, a patch that `git apply --check` accepts in Step 6, a recorded comparison of plan and diff in Step 7. Headings and file existence alone open nothing.
+- **Only the implementer writes code.** Planning names the location, quotes the current code and states the intent, but does not write the new code. The implementing seat (this session, or the Formation's Step 6 executor) produces it as a patch, so the code a different-vendor reviewer reads was not authored by the planner.
+
 ## When To Use
 
 Use VibesDeGoGo! for coding work: implementation, diagnosis, refactoring, or improvement work where the agent should carry the request through to verification and commit.
@@ -38,7 +46,7 @@ Whenever work is delegated to a subagent or an external executor, output one lin
 
 Steps 3, 4, and 6 communicate only through files under `tasks/vdgg/{id}/`, so their executor is swappable through **Step AI Formations** (shared with the Codex edition) — a named, complete Step-to-AI mapping that covers Step 0/3/4/6/6R/7/0-Grill Me from a single config file. See "Step AI Formations" below.
 
-When delegating, output a Delegate line before delegation (see Step reporting), and validate the executor's artifacts yourself before advancing: the output file exists and contains the required headings; for Step 6, the task allowlist and `vdgg_task_gate` still apply, which catches any out-of-allowlist edits the executor made. Steps 1, 2, 5, 8, and 9 are never delegated regardless of mechanism.
+When delegating, output a Delegate line before delegation (see Step reporting), and validate the executor's artifacts yourself before advancing: the output file exists and contains the required headings; for Step 6, the executor writes a patch and this session applies it with `vdgg_patch_apply`, which checks the allowlist, protected paths and the file-count cap before anything changes; the patch chain and `vdgg_task_gate` still apply afterwards. Steps 1, 2, 5, 8, and 9 are never delegated regardless of mechanism.
 
 ### Step AI Formations
 
@@ -163,9 +171,15 @@ Each VibesDeGoGo! session has a unique ID in this format: `YYYYMMDD-HHMM-xxxx`.
 .claude/.vdgg-friction-{id}       append-only log of where gates fired
 tasks/vdgg/{id}/requirements.md   fixed Goal / Constraints / Acceptance criteria
 tasks/vdgg/{id}/investigation.md  Step 3 investigation report
-tasks/vdgg/{id}/todo.md           task list
-tasks/vdgg/{id}/progress.md       progress and retry notes
+tasks/vdgg/{id}/todo.md           task list with plan evidence (Step 4)
+tasks/vdgg/{id}/progress.md       progress, retry notes, plan reconciliation
+tasks/vdgg/{id}/patch/            Step 6 patches applied with vdgg_patch_apply
+tasks/vdgg/{id}/review/           vdgg_plan_diff reports
+.claude/.vdgg-read-{id}           files read during Step 3 (hook-written)
+.claude/.vdgg-task-patchchain-{id} Step 6 patch chain (helper-written)
 ```
+
+Each step accepts only its own phases (the table below), and each phase only after the phase before it in the workflow (for example `testing` only from `implementing`, `reflection` only from `testing`, `verified` only from `testing`, `progress` only from `verified`); `vdgg_state_write` refuses anything else, so no detour walks past a gate. The hooks also refuse a `vdgg_state_advance/loop/write` whose step and phase are not written literally (a variable, an escape), since those cannot be checked.
 
 State files are KEY=VALUE text files with these fields: `step`, `phase`, `loop_count`, `current_task`, `vdgg_id`, and `last_updated`.
 
@@ -377,6 +391,8 @@ Investigation rules:
   for f in $(find tasks/vdgg -name lessons.md -exec ls -t {} + 2>/dev/null | head -20); do echo "--- $f ---"; cat "$f"; done
   ```
 - Mark unknowns explicitly.
+- List every related file under `## 1. Related files`, one top-level list item per file with the path first (optionally in backticks; a `:line` suffix is fine). List files that exist now; files the change will create belong in the Step 4 plan.
+- Read each listed file during this phase. While the phase is `investigating`, the PreToolUse hook records what the agent reads in `.claude/.vdgg-read-{id}`: the targets of Read, Grep, Glob and LS, and the files named by Bash readers (`cat`, `sed -n`, `head`, `tail`, `rg`, `grep`, `git show REV:path`, ...). The Step 3 -> 4 gate refuses when a listed file does not exist or was not read in this phase, or when nothing is listed. `vdgg_check_investigation` prints what is still missing.
 
 Then advance:
 
@@ -385,15 +401,37 @@ Then advance:
 vdgg_state_advance 3 investigating
 ```
 
-The hook blocks Step 4 until `investigation.md` exists and contains all seven required headings each with a non-empty body.
+The hook blocks Step 4 until `investigation.md` exists, contains all seven required headings each with a non-empty body, and every file under `## 1. Related files` exists and was read during this phase.
 
-Use subagents only when parallel investigation clearly helps.
+Use subagents only when parallel investigation clearly helps. A subagent's reads count only if its tool calls pass through these hooks (in-process subagents do); otherwise read the listed files yourself before advancing.
 
-When a Formation is selected and `vdgg_formation_resolve STEP_3_AI` returns a non-`inline` AI, output the Delegate line, write the investigation prompt (see `references/subagent_prompts.md`) with filled-in paths as the input artifact, and call `vdgg_executor_run STEP_3_AI <input-file> tasks/vdgg/{id}/investigation.md`. Validate the required headings on the output before advancing.
+When a Formation is selected and `vdgg_formation_resolve STEP_3_AI` returns a non-`inline` AI, output the Delegate line, write the investigation prompt (see `references/subagent_prompts.md`) with filled-in paths as the input artifact, and call `vdgg_executor_run STEP_3_AI <input-file> tasks/vdgg/{id}/investigation.md`. Validate the required headings on the output before advancing. An external executor's reads are recorded only if it runs under these hooks; if they were not, read the listed files yourself — that is how the controlling session checks a delegated investigation.
 
 ## Step 4: Planning
 
 Use `investigation.md` to create `tasks/vdgg/{id}/todo.md` and `tasks/vdgg/{id}/progress.md`.
+
+`todo.md` carries the plan evidence the Step 4 -> 5 gate checks. Each task is a level-2 heading `## T<n>: <title>` with these level-3 sections:
+
+````markdown
+## T1: <title>
+
+### Location
+`path/to/file.sh:120` (or the path plus a function name)
+
+### Excerpt
+```sh
+<the current code at that location, copied verbatim, at least 2 lines>
+```
+
+### Intent
+<what changes there and why, in prose>
+````
+
+- Repeat `### Location` + `### Excerpt` for each place the task touches. For a file the task creates, write `新規` (or `new`) as the Excerpt instead of a code block.
+- The gate compares every excerpt with the file line by line, indentation included, so copy it from the file you read in Step 3; code written from memory rarely matches.
+- Do not write the new code in the plan: a fenced block anywhere in a task other than the Excerpt is refused. The Intent says what changes; the implementer writes the code in Step 6.
+- The gate runs on `vdgg_state_advance 5 task-selected` and on `vdgg_task_begin` issued from planning. `vdgg_check_plan` prints the problems first.
 
 Task sizing:
 
@@ -408,11 +446,11 @@ Then advance:
 vdgg_state_advance 4 planning
 ```
 
-When a Formation is selected and `vdgg_formation_resolve STEP_4_AI` returns a non-`inline` AI, output the Delegate line, write the planning prompt with filled-in paths as the input artifact, and call `vdgg_executor_run STEP_4_AI <input-file> tasks/vdgg/{id}/todo.md`. Validate the output before advancing (both `todo.md` and `progress.md` must exist).
+When a Formation is selected and `vdgg_formation_resolve STEP_4_AI` returns a non-`inline` AI, output the Delegate line, write the planning prompt with filled-in paths as the input artifact, and call `vdgg_executor_run STEP_4_AI <input-file> tasks/vdgg/{id}/todo.md`. Validate the output before advancing (both `todo.md` and `progress.md` must exist, and `vdgg_check_plan` must pass).
 
 ## Step 5: Select One Task
 
-Choose one task from `todo.md` — or, during a followup sweep, the next pending `TF` task from the queue in `progress.md`. The task must be small enough to complete implementation, tests, and verification in one Step 6 to Step 8 loop; split it before Step 6 if it is not. Declare an allowlist of every implementation/test/documentation file this task is allowed to change; keep it narrow and task-specific. Task notes under `tasks/vdgg/{id}/` never need allowlisting. If the task changes an interface, enum, type, or signature, also include the test file(s) that assert it in the allowlist, so a needed test update does not hit the re-arm wall mid-task.
+Choose one task from `todo.md` — or, during a followup sweep, the next pending `TF` task from the queue in `progress.md`. Start the task title with its id (`T1: ...`, `TF1: ...`); the Step 7 plan reconciliation looks the task up by it. `vdgg_task_begin` is required for every task, `TF` followups included. The task must be small enough to complete implementation, tests, and verification in one Step 6 to Step 8 loop; split it before Step 6 if it is not. Declare an allowlist of every implementation/test/documentation file this task is allowed to change; keep it narrow and task-specific. Task notes under `tasks/vdgg/{id}/` never need allowlisting. If the task changes an interface, enum, type, or signature, also include the test file(s) that assert it in the allowlist, so a needed test update does not hit the re-arm wall mid-task.
 
 ```bash
 # [VibesDeGoGo! Step 5 Start] step=5, phase=task-selected, loop=0
@@ -424,16 +462,24 @@ vdgg_task_begin "T1: title" path/to/file1 path/to/file2
 
 ## Step 6: Implement
 
-Implement the selected task and write tests where appropriate.
+Implement the selected task and write tests where appropriate. Step 6 is patch first: implementation files change only through a checked patch.
 
 ```bash
 # [VibesDeGoGo! Step 6 Start] step=6, phase=implementing, loop=0
 vdgg_state_advance 6 implementing
+# write the change as a unified diff (paths relative to the repository root):
+#   tasks/vdgg/{id}/patch/T1.patch
+vdgg_patch_apply tasks/vdgg/{id}/patch/T1.patch
 ```
+
+- In `implementing`, Edit/Write on implementation files is refused; write the patch file (a task note) instead. `vdgg_patch_apply` runs `git apply --check` and applies the patch only if it passes. Every file it touches must be on the task allowlist, symlinks, renames and copies are refused, and a patch that touches more than 3 files is refused: that size means the task should have been split (Step 4 sizing). Write a follow-up patch against the new state of the files for the next change in the same task.
+- Mechanical bulk edits (many-file renames or substitutions) use a codemod instead of a patch: run the dry run first, then `vdgg_codemod_apply <expected-files> <command> [args...]`, e.g. `vdgg_codemod_apply 12 perl -pi -e 's/old_name/new_name/g' <files...>`. The helper refuses when the number of changed allowlisted files differs from the dry run, or when files off the allowlist changed.
+- `vdgg_state_advance 7 testing` is refused until at least one patch or codemod has been applied for the task and the allowlisted files still hold exactly what the last one left. An edit made any other way (a shell redirect, `sed -i`) is caught there; `vdgg_task_rollback` restores the baseline and restarts the patch chain.
+- Patches are written per task, right before applying, so an earlier task's changes cannot shift the context lines of a patch prepared in advance.
 
 Do not run tests in `implementing`; the hook blocks test commands until Step 7. Edit/Write outside the task allowlist is blocked. `vdgg_task_begin` can only (re)arm at Step 5 — the state machine rejects it from `implementing`/`reflection` (6 -> 5 is not a legal transition). If the scope legitimately grew mid-task, either narrow the change to fit the current allowlist, or finish this task through Step 8 and select the extra scope as a new task at Step 5 (8 -> 5) with the right allowlist.
 
-When a Formation is selected and `vdgg_formation_resolve STEP_6_AI` returns a non-`inline` AI, output the Delegate line, write the implementation prompt (see `references/subagent_prompts.md`) with filled-in paths and the current task's allowlist as the input artifact, and call `vdgg_executor_run STEP_6_AI <input-file>`. The executor edits files in the working tree; the task allowlist and `vdgg_task_gate` still apply, so out-of-allowlist edits are caught at Step 7. When no Formation is selected, Step 6 runs inline.
+When a Formation is selected and `vdgg_formation_resolve STEP_6_AI` returns a non-`inline` AI, output the Delegate line, write the implementation prompt (see `references/subagent_prompts.md`) with filled-in paths and the current task's allowlist as the input artifact, and call `vdgg_executor_run STEP_6_AI <input-file> tasks/vdgg/{id}/patch/<task>.patch`. The executor writes the patch, not the working tree; this session applies it with `vdgg_patch_apply`, so the code is the executor's and the check is this session's. When no Formation is selected, Step 6 runs inline.
 
 ## Step 7: Verify
 
@@ -459,7 +505,7 @@ Outcomes:
 - `modified=0`: verified transition is allowed.
 - `modified=1`: verified transition is blocked; go through reflection and re-test.
 
-When a task allowlist is active, `vdgg_state_advance 7 verified` is also blocked until `vdgg_task_gate` has passed for the current loop. If verification fails and the work must be redone from the baseline, `vdgg_task_rollback` reverts the allowlisted changes.
+`vdgg_state_advance 7 verified` is also blocked until `vdgg_task_gate` has passed for the current loop (every task has an allowlist: `vdgg_task_begin` is required at Step 5, including for `TF` followups, because the Step 6 -> 7 patch gate needs it). If verification fails and the work must be redone from the baseline, `vdgg_task_rollback` reverts the allowlisted changes.
 
 For environments that cannot use the `simplify` skill, or when `.vdgg-target` configures an external reviewer, run the review through `vdgg_review_run`:
 
@@ -470,9 +516,27 @@ vdgg_review_run <command> [args...]  # runs an explicit review command
 
 When a Formation is selected and `vdgg_formation_resolve STEP_7_AI` returns a non-`inline` AI, output the Delegate line, write the review prompt with the working-tree diff and verification results as the input artifact, and call `vdgg_review_run vdgg_executor_run STEP_7_AI <input-file> <findings-output>` so the gate is recorded only when the executor succeeds. The sentinel records that the review ran, not that it passed, so apply the severity-based response below before advancing. The Formation review is read-only (findings only, no edits). When no Formation is selected, use `simplify` or `vdgg_review_run` as above.
 
-It writes the review sentinel only when the command exits 0, and it is the documented way to write one: recording the gate means running a command that succeeds, rather than calling a bare marker. The verified gate accepts either sentinel — simplify or explicit review — and both are subject to the same rule: implementation edits after the review flip `modified=1` and route through reflection. Prefer the simplify skill when it is available; prefer a different vendor than the implementing model for external review. For code that ships to other machines or handles user data, the review prompt must include a security perspective (injection, secrets exposure, unsafe file/network/exec operations) — simplify does not cover security. Sentinel files cannot be written directly; the hooks block Edit/Write/Bash writes to `.claude/.vdgg-*` paths.
+It writes the review sentinel only when the command exits 0, and it is the documented way to write one: recording the gate means running a command that succeeds, rather than calling a bare marker. The verified gate accepts either sentinel — simplify or explicit review — and both are subject to the same rule: an implementation change after the review flips `modified=1` and routes through reflection (direct edits are refused in `testing`; the fix comes as the next loop's patch). Prefer the simplify skill when it is available; prefer a different vendor than the implementing model for external review. For code that ships to other machines or handles user data, the review prompt must include a security perspective (injection, secrets exposure, unsafe file/network/exec operations) — simplify does not cover security. Sentinel files cannot be written directly; the hooks block Edit/Write/Bash writes to `.claude/.vdgg-*` paths.
 
 For a **subjective artifact** (docs, copy, naming, design — where quality is a judgment, not something a test can decide), the review gate can be the `MAGI` skill (installed as `zmagi`, formerly `magi`) when it is present: run MAGI as the review, write its verdict line to `tasks/vdgg/{id}/magi-verdict.md`, and record the gate with `vdgg_review_run grep -q '^MAGI判定: 可決' tasks/vdgg/{id}/magi-verdict.md`, so a deliberation recorded as 未達 cannot open it. The verdict file is written by the agent, so this checks the record, not the deliberation itself. If MAGI is not installed, skip it and use the standard `simplify`/review gate above. MAGI judges desirability, not code correctness — correctness still rides on tests and `simplify`.
+
+### Plan reconciliation
+
+Before the review, compare the task's plan with what was actually changed:
+
+```bash
+vdgg_plan_diff            # writes tasks/vdgg/{id}/review/<task>-plan-vs-diff.md and prints its path
+```
+
+The report places the task's plan (Locations, Excerpts, Intent) next to the diff since `vdgg_task_begin`, and lists planned files that changed, planned files that did not, and changed files the plan does not mention. Give it to the reviewer with the diff and ask for (1) changes the plan does not mention and (2) planned changes that were not made. Then record the outcome in `progress.md`:
+
+```markdown
+### Plan reconciliation: T1
+- path/a.sh: as planned
+- path/b.sh: not planned; needed because ...
+```
+
+Discrepancies do not block: forcing the diff to match the plan would push a wrong plan into the code. An unrecorded comparison does block. For a task from `todo.md`, `vdgg_state_advance 7 verified` is refused until that heading exists with a non-empty body. Followup `TF` tasks that are not in `todo.md` need no record. Any other task must be one of `todo.md`'s tasks, and its title starts with its id (`T1: ...`).
 
 ### Multi-perspective review is mandatory (Layer 2)
 
@@ -537,10 +601,10 @@ After simplify returns findings, classify each one and decide before editing:
 
 Response:
 
-- Any **high or medium** finding → fix it in implementation files. The sentinel will flip to `modified=1`, routing you through reflection — this is correct.
+- Any **high or medium** finding → go to reflection (`vdgg_state_advance 6 reflection`) and make the fix in the next loop as a patch (`vdgg_patch_apply`). Direct edits to implementation files are refused in `testing` as in `implementing`; if a review tool edits files anyway, the sentinel flips to `modified=1` and the patch chain reports the change, so both routes end in reflection.
 - **All findings are low (or `[]`)** → DO NOT edit implementation files. Append the findings to `tasks/vdgg/{id}/followup.md` — or, inside a `TF` followup task, to `followup-final.md` — and advance directly to `verified`. Low items are collected by the Step 8 followup sweep.
 
-This stops convergence-loops on cosmetic findings while keeping the hook discipline intact: any implementation edit during testing still flips `modified=1`, so there is no escape hatch for high/medium.
+This stops convergence-loops on cosmetic findings while keeping the hook discipline intact: a high/medium fix always costs a reflection and a patch, so there is no escape hatch for it.
 
 When listing findings, always assign an explicit `severity` field per finding so the classification is auditable. If simplify's own output omits severity, classify each finding yourself before deciding the response.
 
@@ -716,11 +780,11 @@ When stopping intentionally, include `[Intentional Stop]` in assistant text and 
 - [ ] Step 0: agree on Goal / Constraints / Acceptance criteria.
 - [ ] Step 1: initialize state and declare formation.
 - [ ] Step 2: write `requirements.md`.
-- [ ] Step 3: write `investigation.md`.
-- [ ] Step 4: write `todo.md` and `progress.md`.
+- [ ] Step 3: read every related file and write `investigation.md`.
+- [ ] Step 4: write `todo.md` (Location / verbatim Excerpt / Intent per task) and `progress.md`.
 - [ ] Step 5: select one task and record `current_task`.
-- [ ] Step 6: implement.
-- [ ] Step 7: verify, run simplify, and only then mark verified.
+- [ ] Step 6: implement through `vdgg_patch_apply` (or `vdgg_codemod_apply`).
+- [ ] Step 7: verify, reconcile plan and diff (`vdgg_plan_diff`), run simplify, and only then mark verified.
 - [ ] Step 6-R: if needed, investigate failure, record one hypothesis, and retry.
 - [ ] Step 8: update progress/version, run the followup sweep for remaining low findings, and request validation.
 - [ ] Step 9: commit, push/PR according to workflow, clear state, and report.

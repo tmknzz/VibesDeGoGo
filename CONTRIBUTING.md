@@ -70,12 +70,13 @@ When changing names or comments:
 
 ## Files Shared Between Editions
 
-Six files exist under both `skills/vibesdegogo/` and
+Seven files exist under both `skills/vibesdegogo/` and
 `.agents/skills/vibesdegogo/` and must stay byte-identical:
 
 - `scripts/vdgg-llm-start.sh`
 - `scripts/vdgg-exec-claude.sh`
 - `scripts/vdgg-exec-codex.sh`
+- `scripts/vdgg-evidence.sh`
 - `references/servers-conf.md`
 - `references/servers.conf.example`
 - `references/local-inference-setup.md`
@@ -84,11 +85,13 @@ If you change one copy, make the other copy identical in the same commit. This
 applies to every change, including documentation and comment-only edits — it is
 not limited to hook or state scripts.
 
-No test checks this synchronization, so verify it yourself:
+`tests/test-edition-sync.sh` checks this for every file above except
+`references/local-inference-setup.md`, whose install paths differ between the
+editions on purpose. To check them all by hand:
 
 ```bash
 for f in scripts/vdgg-llm-start.sh scripts/vdgg-exec-claude.sh \
-         scripts/vdgg-exec-codex.sh references/servers-conf.md \
+         scripts/vdgg-exec-codex.sh scripts/vdgg-evidence.sh references/servers-conf.md \
          references/servers.conf.example references/local-inference-setup.md; do
   cmp "skills/vibesdegogo/$f" ".agents/skills/vibesdegogo/$f" || echo "OUT OF SYNC: $f"
 done

@@ -122,7 +122,7 @@ skills/vibesdegogo/
 tests/
 ```
 
-2つのツリー間で意図的に重複していて、byte 一致を保つ必要があるファイルが6本あります。executor wrapper 3本（`vdgg-llm-start.sh`、`vdgg-exec-claude.sh`、`vdgg-exec-codex.sh`）と共有 reference 3本（`servers-conf.md`、`servers.conf.example`、`local-inference-setup.md`）です。[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
+2つのツリー間で意図的に重複していて、byte 一致を保つ必要があるファイルが7本あります。executor wrapper 3本（`vdgg-llm-start.sh`、`vdgg-exec-claude.sh`、`vdgg-exec-codex.sh`）、証拠ゲートのライブラリ（`vdgg-evidence.sh`）、共有 reference 3本（`servers-conf.md`、`servers.conf.example`、`local-inference-setup.md`）です。[CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
 
 ## インストール：Claude Code 版
 

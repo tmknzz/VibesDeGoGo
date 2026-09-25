@@ -48,20 +48,45 @@ set -e
 assert_exit_code 1 "$STATUS" "out-of-allowlist change fails check"
 rm -f src/other.sh
 
-# Gate passes with a clean allowlist and a succeeding command.
+# Verification belongs to Step 7: the gate refuses to record a pass before
+# testing, even for a command that succeeds.
 set +e
+vdgg_state_advance 6 implementing >/dev/null 2>&1
 vdgg_task_gate true >/dev/null 2>&1
+STATUS=$?
+set -e
+assert_exit_code 1 "$STATUS" "task gate refuses outside testing"
+assert_file_not_exists ".claude/.vdgg-task-gate-${ID}-0" "no pass is recorded outside testing"
+vdgg_state_advance 7 testing >/dev/null 2>&1
+
+# A bare call runs nothing, so it records nothing.
+set +e
+vdgg_task_gate >/dev/null 2>&1
+STATUS=$?
+set -e
+assert_exit_code 1 "$STATUS" "task gate refuses a call without a command"
+assert_file_not_exists ".claude/.vdgg-task-gate-${ID}-0" "a bare call records no pass"
+
+# Gate passes with a clean allowlist and a succeeding command, and records
+# the command it ran.
+set +e
+vdgg_task_gate sh -c 'exit 0' >/dev/null 2>&1
 STATUS=$?
 set -e
 assert_exit_code 0 "$STATUS" "task gate passes"
 assert_file_exists ".claude/.vdgg-task-gate-${ID}-0" "gate file recorded"
+GATE_CMD=$(grep '^command=' ".claude/.vdgg-task-gate-${ID}-0" | cut -d= -f2-)
+assert_contains "$GATE_CMD" "sh -c" "gate file records the command that ran"
+assert_contains "$GATE_CMD" "exit" "gate file records the command's arguments"
 
-# Gate fails when the verification command fails.
+# Gate fails when the verification command fails, and the failure removes the
+# earlier pass of this loop: a later failing check must not leave it standing.
 set +e
 vdgg_task_gate false >/dev/null 2>&1
 STATUS=$?
 set -e
 assert_exit_code 1 "$STATUS" "task gate propagates command failure"
+assert_file_not_exists ".claude/.vdgg-task-gate-${ID}-0" "a failing run removes the earlier pass"
 
 # Rollback restores the baseline content and removes the gate file.
 echo "v3" > src/app.sh

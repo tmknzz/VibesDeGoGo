@@ -72,6 +72,12 @@ grouped by edition. Their histories are merged into this repository.
 
 ### Fixed
 
+- `vdgg_task_gate` (both editions) no longer records a pass for nothing: a
+  call without a verification command is refused, it runs only in Step 7
+  (`testing`), it removes the loop's earlier pass before running (so a later
+  failing check cannot leave an old pass standing), and the gate file records
+  the command that ran (`command=`) so the pass can be checked afterwards.
+
 - `.vdgg-target` values wrapped in single quotes are now unquoted like
   double-quoted ones. `REVIEW_COMMAND='cmd with args'` previously reached
   `bash -c` with the quotes attached and failed as a single unknown command

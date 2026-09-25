@@ -1889,20 +1889,49 @@ EOF
 
 # Run the verification command through the task gate: the allowlist must hold
 # and the command must succeed before the per-loop gate file is written.
+# The gate needs a command (a bare call used to record a pass with nothing
+# run), runs only in Step 7 (testing), and records the command it ran so the
+# pass can be checked afterwards. Any run first removes this loop's earlier
+# pass, so a later failing verification cannot leave an old pass standing.
 vdgg_task_gate() {
-    local id loop gate_file
-    vdgg_task_check_allowlist || return 1
-    if [ "$#" -gt 0 ]; then
-        "$@" || return $?
+    local id loop gate_file state_file phase rc cmd
+    if [ "$#" -eq 0 ]; then
+        echo "vdgg_task_gate: usage: vdgg_task_gate <verification-command> [args...] (a pass is recorded only for a command that ran)" >&2
+        return 1
     fi
     id=$(_vdgg_get_active_id)
+    if [ -z "$id" ]; then
+        echo "vdgg_task_gate: active session not found" >&2
+        return 1
+    fi
+    state_file=$(_vdgg_state_file_for_id "$id")
+    phase=$(_vdgg_state_field phase "$state_file")
+    if [ "$phase" != "testing" ]; then
+        echo "vdgg_task_gate: verification runs in Step 7 (phase testing); current phase is ${phase:-unknown}" >&2
+        return 1
+    fi
     loop=$(_vdgg_task_loop)
     gate_file=$(_vdgg_task_gate_file_for_id "$id" "$loop")
-    cat > "$gate_file" << EOF
+    rm -f "$gate_file"
+    vdgg_task_check_allowlist || return 1
+    if "$@"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+        echo "vdgg_task_gate: verification failed with status ${rc}; no pass recorded" >&2
+        return "$rc"
+    fi
+    # One line, shell-quoted, so the record shows exactly what ran.
+    cmd=$(printf '%q ' "$@" | tr '\n' ' ')
+    cat >| "$gate_file" << EOF
 passed=1
 passed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+exit=0
+command=${cmd% }
 EOF
-    echo "vdgg-task: gate passed for id=${id}, loop=${loop}" >&2
+    echo "vdgg-task: gate passed for id=${id}, loop=${loop}: ${cmd% }" >&2
 }
 
 # Revert the current task's changes back to the vdgg_task_begin baseline.

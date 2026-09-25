@@ -63,10 +63,18 @@ assert_contains "$CHANGED" "functions/new.js" "Codex task changed files include 
 vdgg_task_check_allowlist >/tmp/vdgg-test-codex-allow.out 2>/tmp/vdgg-test-codex-allow.err
 ALLOW_RC=$?
 assert_exit_code 0 "$ALLOW_RC" "Codex task allowlist passes allowed changes"
+vdgg_state_advance 6 implementing >/dev/null 2>&1
+vdgg_task_gate true >/dev/null 2>&1
+assert_exit_code 1 "$?" "Codex task gate refuses outside testing"
+vdgg_state_advance 7 testing >/dev/null 2>&1
+vdgg_task_gate >/dev/null 2>&1
+assert_exit_code 1 "$?" "Codex task gate refuses a call without a command"
+assert_file_not_exists ".codex/.vdgg-task-gate-${ID}-0" "Codex bare task gate records no pass"
 vdgg_task_gate true >/tmp/vdgg-test-codex-gate.out 2>/tmp/vdgg-test-codex-gate.err
 GATE_RC=$?
 assert_exit_code 0 "$GATE_RC" "Codex task gate passes after allowlist and command"
 assert_file_exists ".codex/.vdgg-task-gate-${ID}-0" "Codex task gate writes success sentinel"
+assert_eq "command=true" "$(grep '^command=' ".codex/.vdgg-task-gate-${ID}-0")" "Codex task gate records the command that ran"
 vdgg_task_rollback >/tmp/vdgg-test-codex-rollback.out 2>/tmp/vdgg-test-codex-rollback.err
 ROLLBACK_RC=$?
 assert_exit_code 0 "$ROLLBACK_RC" "Codex task rollback succeeds for allowed changes"
@@ -79,7 +87,8 @@ vdgg_task_check_allowlist >/tmp/vdgg-test-codex-deny.out 2>/tmp/vdgg-test-codex-
 DENY_RC=$?
 assert_exit_code 1 "$DENY_RC" "Codex task allowlist rejects disallowed changes"
 rm -f functions/other.js
-vdgg_state_advance 6 implementing >/tmp/vdgg-test-codex-6.out 2>/tmp/vdgg-test-codex-6.err
+# From testing, the way back to implementing is through reflection.
+vdgg_state_advance 6 reflection >/tmp/vdgg-test-codex-6.out 2>/tmp/vdgg-test-codex-6.err
 vdgg_state_loop 6 implementing >/tmp/vdgg-test-codex-loop.out 2>/tmp/vdgg-test-codex-loop.err
 LOOP_COUNT=$(grep '^loop_count=' ".codex/.vdgg-state-${ID}" | cut -d= -f2)
 assert_eq "1" "$LOOP_COUNT" "Codex vdgg_state_loop increments loop_count"
@@ -641,6 +650,7 @@ printf 'loop survival change\n' > functions/index.js
 vdgg_task_check_allowlist >/tmp/vdgg-test-codex-loop-survival-check.out 2>/tmp/vdgg-test-codex-loop-survival-check.err
 LOOP_ALLOW_RC=$?
 assert_exit_code 0 "$LOOP_ALLOW_RC" "Codex task allowlist passes after vdgg_state_loop increment"
+vdgg_state_advance 7 testing >/dev/null 2>&1
 vdgg_task_gate true >/tmp/vdgg-test-codex-loop-survival-gate.out 2>/tmp/vdgg-test-codex-loop-survival-gate.err
 LOOP_GATE_RC=$?
 assert_exit_code 0 "$LOOP_GATE_RC" "Codex task gate passes after vdgg_state_loop increment"

@@ -45,7 +45,7 @@ vdgg_review_run [review command...]
 vdgg_task_begin <task title> <allowed path>...
 vdgg_task_changed_files
 vdgg_task_check_allowlist
-vdgg_task_gate [verification command...]
+vdgg_task_gate <verification command> [args...]
 vdgg_task_rollback
 vdgg_patch_apply <patch under tasks/vdgg/{id}/patch/>
 vdgg_codemod_apply <expected-files> <command> [args...]
@@ -68,7 +68,10 @@ pretool hook blocks Edit/Write outside the allowlist (task notes under
 `tasks/vdgg/{id}/` are exempt). `vdgg_task_gate` re-checks the allowlist
 against actual changed files (catching Bash-mediated edits too), runs the
 verification command, and writes `.claude/.vdgg-task-gate-{id}-{loop}` on
-success — required before `verified` whenever an allowlist is active.
+success — required before `verified` whenever an allowlist is active. It
+refuses a call without a command and any phase but `testing`, removes this
+loop's earlier pass before running, and records the command it ran
+(`command=`, shell-quoted) with `passed_at` and `exit=0`.
 `vdgg_task_rollback` reverts allowlisted changes to the baseline; if files
 outside the allowlist changed, it refuses — resolve those manually (e.g.
 `git status` + `git checkout -- <file>`) before retrying. Rollback also

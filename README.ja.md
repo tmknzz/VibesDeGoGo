@@ -15,10 +15,11 @@ bash と jq のみ。アカウント・鍵・テレメトリなし。MIT。
 
 ## エディション
 
-このリポジトリには、ワークフローを共有しつつ対象エージェントが異なる2つのエディションが入っています。
+このリポジトリには、ワークフローを共有しつつ対象エージェントが異なる3つのエディションが入っています。
 
 - **for Claude Code** ── `skills/vibesdegogo/`、`hooks/hooks.json`、`.claude-plugin/`
 - **for Codex** ── `.agents/skills/vibesdegogo/`、`.codex/hooks.json`
+- **for pi / Qwen** ── `pi/`。起動と必要条件は [pi版README](pi/README.md) を参照。
 
 導入は独立しています。使う方だけ入れても、両方入れてもかまいません。
 

@@ -1,0 +1,36 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const launcher = resolve('pi/vdgg-pi.sh');
+test('launcher selects pi/qwenmagi and preserves literal model arguments', t => {
+  const root = mkdtempSync(join(tmpdir(), 'vdgg launcher '));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  spawnSync('git', ['init', '-q', root]);
+  mkdirSync(join(root, 'nested')); mkdirSync(join(root, 'qwen skill'));
+  writeFileSync(join(root, 'qwen skill/SKILL.md'), 'fixture');
+  const capture = join(root, 'capture.json'), fake = join(root, 'fake pi');
+  writeFileSync(fake, '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),override:process.env.VDGG_CWD,core:process.env.VDGG_CODEX_SKILL_DIR,qwenBin:process.env.QWENMAGI_PI_BIN}))\n', { mode: 0o755 });
+  const cleanEnv = { ...process.env }; delete cleanEnv.QWENMAGI_PI_BIN;
+  const env = { ...cleanEnv, VDGG_PI_BIN: fake, QWENMAGI_SKILL_DIR: join(root, 'qwen skill'), CAPTURE: capture, VDGG_CWD: 'outer-root' };
+  const result = spawnSync('bash', [launcher, '--model', 'model with spaces', '--thinking', 'off'], { cwd: join(root, 'nested'), env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const recorded = JSON.parse(readFileSync(capture, 'utf8'));
+  assert.equal(recorded.cwd, realpathSync(root));
+  assert.equal(recorded.qwenBin, fake);
+  assert.equal(recorded.override, undefined);
+  assert.deepEqual(recorded.args.slice(-4), ['--model','model with spaces','--thinking','off']);
+  assert.ok(recorded.args.includes('--no-extensions'));
+  assert.ok(recorded.args.includes('--no-skills'));
+  assert.ok(recorded.args.includes(join(root, 'qwen skill/SKILL.md')));
+  assert.match(recorded.core, /\.agents\/skills\/vibesdegogo$/);
+  const explicit = spawnSync('bash', [launcher], { cwd: root, env: { ...env, QWENMAGI_PI_BIN: '/explicit/seat/pi' }, encoding: 'utf8' });
+  assert.equal(explicit.status, 0, explicit.stderr);
+  assert.equal(JSON.parse(readFileSync(capture, 'utf8')).qwenBin, '/explicit/seat/pi');
+  const missing = spawnSync('bash', [launcher], { cwd: root, env: { ...env, QWENMAGI_SKILL_DIR: join(root, 'missing') }, encoding: 'utf8' });
+  assert.equal(missing.status, 69);
+  assert.match(missing.stderr, /required resource missing/);
+});
